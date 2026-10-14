@@ -1,0 +1,63 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Orders | WUSA{% endblock %}
+{% block content %}
+<h1>Orders</h1>
+<div class="card search-bar">
+  <form method="get" class="search-form">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
+    {% if pick %}<input type="hidden" name="pick" value="{{ pick }}">{% endif %}
+    <input type="search" name="q" value="{{ q }}" placeholder="Order no, serial, item, customer, or salesperson" aria-label="Search orders">
+    <button type="submit">Search</button>
+    {% if q %}<a href="{% url 'order_list' %}?sort={{ sort }}&dir={{ dir }}{% if pick %}&pick={{ pick }}{% endif %}">Clear</a>{% endif %}
+  </form>
+  <div class="search-filters" role="group" aria-label="Order filters">
+    {% for key, label in filters %}
+    <a class="{% if pick == key %}active{% endif %}" href="?{% if pick != key %}pick={{ key }}&{% endif %}sort={{ sort }}&dir={{ dir }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <a class="button" href="{% url 'order_create' %}">Create order</a>
+</div>
+<div class="card">
+  <table class="orders-table">
+    <thead>
+      <tr>
+        <th><a class="sort-link{% if sort == 'order_no' %} active {{ dir }}{% endif %}" href="?sort=order_no&dir={% if sort == 'order_no' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Order no</a></th>
+        <th><a class="sort-link{% if sort == 'serial' %} active {{ dir }}{% endif %}" href="?sort=serial&dir={% if sort == 'serial' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Serial No</a></th>
+        <th><a class="sort-link{% if sort == 'item_no' %} active {{ dir }}{% endif %}" href="?sort=item_no&dir={% if sort == 'item_no' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Item no</a></th>
+        <th><a class="sort-link{% if sort == 'product' %} active {{ dir }}{% endif %}" href="?sort=product&dir={% if sort == 'product' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Product</a></th>
+        <th><a class="sort-link{% if sort == 'customer' %} active {{ dir }}{% endif %}" href="?sort=customer&dir={% if sort == 'customer' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Customer</a></th>
+        <th><a class="sort-link{% if sort == 'order_date' %} active {{ dir }}{% endif %}" href="?sort=order_date&dir={% if sort == 'order_date' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">order Date</a></th>
+        <th><a class="sort-link{% if sort == 'sales_person' %} active {{ dir }}{% endif %}" href="?sort=sales_person&dir={% if sort == 'sales_person' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Sales person</a></th>
+        <th><a class="sort-link{% if sort == 'qc_status' %} active {{ dir }}{% endif %}" href="?sort=qc_status&dir={% if sort == 'qc_status' and dir == 'asc' %}desc{% else %}asc{% endif %}{% if pick %}&pick={{ pick }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">QC status</a></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+      <tr>
+        <td>{{ order.order_no }}</td>
+        <td>{% if order.physical_unit %}{{ order.physical_unit.item_serial_no }}{% endif %}</td>
+        <td>{{ order.item_no }}</td>
+        <td>{{ order.product.product_name }}</td>
+        <td>{{ order.customer_no }}</td>
+        <td>{{ order.order_date }}</td>
+        <td>{{ order.sales_person }}</td>
+        <td>
+          {% if order.physical_unit %}
+          <span class="badge status-{{ order.physical_unit.unit_status }}">{{ order.physical_unit.get_unit_status_display }}</span>
+          {% endif %}
+        </td>
+        <td class="actions">
+          <a class="icon-btn" href="{% url 'order_edit' order.order_id %}" aria-label="Edit order {{ order.order_no }}" title="Edit">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>
+          </a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9" class="empty">No orders found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

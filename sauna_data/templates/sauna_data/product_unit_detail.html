@@ -1,0 +1,43 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Order {{ unit.serial_number }} | Product Test Data{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'product_model_list' %}">Models &amp; Orders</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'product_unit_list' %}">Orders</a>
+  <span aria-hidden="true">/</span>
+  <span>{{ unit.serial_number }}</span>
+</nav>
+
+<h1>Order: {{ unit.serial_number }}</h1>
+<div class="card">
+  <p><strong>Serial Number:</strong> {{ unit.serial_number }}</p>
+  <p><strong>Model:</strong> <a href="{% url 'product_model_detail' unit.model.model_id %}">{{ unit.model.model_name }}</a></p>
+  <p><strong>Supplier:</strong> {{ unit.model.get_supplier_display|default:"—" }}</p>
+  <p><strong>PowerBox Type:</strong> {{ unit.powerbox_type|default:"—" }}</p>
+  <p><strong>Wattage:</strong> {% if unit.display_wattage is not None %}{{ unit.display_wattage }} W{% else %}—{% endif %}</p>
+  <p><strong>Notes:</strong> {{ unit.notes|default:"—" }}</p>
+</div>
+<div class="card">
+  <h2>Test runs</h2>
+  <table>
+    <thead><tr><th>TestID</th><th>Date</th><th>Tester</th></tr></thead>
+    <tbody>
+      {% for run in test_runs %}
+      <tr>
+        <td><a href="{% url 'test_run_detail' run.test_run_id %}">{{ run.test_run_id }}</a></td>
+        <td>{{ run.test_date }}</td>
+        <td>{{ run.tester_name|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">No test runs for this order.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if test_runs %}
+  <p><a href="{% url 'test_run_list' %}?search_type=serial&amp;q={{ unit.serial_number|urlencode }}">Browse all tests for this order</a></p>
+  {% endif %}
+</div>
+{% endblock %}

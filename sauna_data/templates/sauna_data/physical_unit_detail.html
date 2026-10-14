@@ -1,0 +1,72 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Serial {{ unit.serial_no }} | WUSA{% endblock %}
+{% block main_class %}page-unit{% endblock %}
+{% block content %}
+<div class="unit-page-head">
+  <h1>Serial {{ unit.serial_no }}</h1>
+  <a class="unit-back" href="{% url 'physical_unit_list' %}">Back to QC &amp; CS</a>
+</div>
+<div class="unit-page">
+  <div class="card qc-top-card">
+    <form method="post" class="qc-edit-form">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="form-banner-error" role="alert">
+        <strong>Please fix the highlighted fields.</strong>
+        <ul>
+          {% for error in form.non_field_errors %}
+          <li>{{ error }}</li>
+          {% endfor %}
+          {% for field in form %}
+            {% for error in field.errors %}
+            <li>{{ field.label }}: {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      <input type="hidden" name="action" value="save_status">
+      <div class="qc-field">
+        <label for="{{ form.product.id_for_label }}">Product</label>
+        {{ form.product }}
+      </div>
+      {{ form.product.errors }}
+      <div class="qc-field">
+        <label for="{{ form.qc_tester_name.id_for_label }}">QC tester name</label>
+        {{ form.qc_tester_name }}
+      </div>
+      {{ form.qc_tester_name.errors }}
+      <div class="qc-field">
+        <label for="{{ form.qc_status.id_for_label }}">QC status</label>
+        {{ form.qc_status }}
+      </div>
+      {{ form.qc_status.errors }}
+      <div class="qc-field qc-field-notes">
+        <label for="{{ form.note.id_for_label }}">Note</label>
+        {{ form.note }}
+      </div>
+      {{ form.note.errors }}
+      <button type="submit" class="qc-save">Save</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>QC form</h2>
+    {% if unit.qc_form_name %}
+    <p><a href="{% url 'qc_form_file' unit.product_item_id %}" target="_blank" rel="noopener noreferrer">{{ unit.qc_form_name }}</a></p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="delete_form">
+      <button type="submit">Remove form</button>
+    </form>
+    {% else %}
+    <p>—</p>
+    {% endif %}
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="upload_form">
+      <input type="file" name="qc_form" accept=".pdf,application/pdf" required aria-label="QC form">
+      <button type="submit">Upload form</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

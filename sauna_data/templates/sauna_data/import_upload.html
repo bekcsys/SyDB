@@ -1,0 +1,36 @@
+{% extends "sauna_data/import_base.html" %}
+{% block title %}Import CSV | Product Test Data{% endblock %}
+{% block import_content %}
+<h1>Import CSV</h1>
+{% if not has_product_models %}
+<p class="failed">No product models in the database yet. Add models under <a href="{% url 'product_model_list' %}">Models &amp; Orders → Models</a> or in Django <a href="/admin/sauna_data/productmodel/">admin</a>, then return here.</p>
+{% endif %}
+<div class="card">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Import</button>
+  </form>
+  {% if summary %}
+  <h2>Import summary</h2>
+  <p><strong>File:</strong> {{ summary.file_name }}</p>
+  <p class="{% if summary.status == 'success' %}success{% else %}failed{% endif %}">
+    <strong>Status:</strong> {{ summary.status }}
+  </p>
+  {% if summary.test_run_id %}<p><strong>TestID:</strong> {{ summary.test_run_id }}</p>{% endif %}
+  <p><strong>Rows imported:</strong> {{ summary.rows_imported }}</p>
+  <p><strong>Sensors detected:</strong> {{ summary.sensors_detected }}</p>
+  <p><strong>Duration:</strong> {{ summary.duration_seconds|floatformat:2 }} s</p>
+  {% if summary.archive_path %}<p><strong>Archive path:</strong> {{ summary.archive_path }}</p>{% endif %}
+  {% if summary.error_message %}<p><strong>Error:</strong> {{ summary.error_message }}</p>{% endif %}
+  {% if summary.max_temp_by_sensor %}
+  <h3>Max temperature per sensor</h3>
+  <ul>
+    {% for label, temp in summary.max_temp_by_sensor.items %}
+    <li>{{ label }}: {{ temp }} °F</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

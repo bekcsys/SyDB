@@ -1,0 +1,9 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Could not save | WUSA{% endblock %}
+{% block content %}
+<h1>Could not save</h1>
+<div class="card">
+  <div class="form-banner-error" role="alert">{{ message }}</div>
+  <p><a href="javascript:history.back()">Go back</a> and review the form.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Model {{ model.model_name }} | Product Test Data{% endblock %}
+{% block content %}
+<h1>Product Model: {{ model.model_name }}</h1>
+<div class="card">
+  <p><strong>Supplier:</strong> {{ model.get_supplier_display|default:"—" }}</p>
+  <p><strong>Rated voltage:</strong> {{ model.rated_voltage|default:"—" }}</p>
+  <p><strong>Rated power (W):</strong> {{ model.rated_power_watts|default:"—" }}</p>
+  <p><strong>Notes:</strong> {{ model.notes|default:"—" }}</p>
+</div>
+<div class="card">
+  <h2>Orders</h2>
+  <table>
+    <thead><tr><th>Serial</th><th>Tests</th></tr></thead>
+    <tbody>
+      {% for unit in units %}
+      <tr>
+        <td><a href="{% url 'product_unit_detail' unit.unit_id %}">{{ unit.serial_number }}</a></td>
+        <td>{{ unit.test_count }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2">No units registered.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>All test runs</h2>
+  <table>
+    <thead><tr><th>TestID</th><th>Serial</th><th>Date</th></tr></thead>
+    <tbody>
+      {% for run in test_runs %}
+      <tr>
+        <td><a href="{% url 'test_run_detail' run.test_run_id %}">{{ run.test_run_id }}</a></td>
+        <td>{{ run.unit.serial_number }}</td>
+        <td>{{ run.test_date }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

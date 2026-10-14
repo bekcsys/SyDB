@@ -1,0 +1,24 @@
+{% extends "sauna_data/base.html" %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'import_upload' %}">Data Imports</a>
+  <span aria-hidden="true">/</span>
+  {% if import_tab == "upload" %}
+  <span>Import CSV</span>
+  {% elif import_tab == "pending" %}
+  <span>Pending Import CSV files</span>
+  {% elif import_tab == "recent" %}
+  <span>Recent Imports</span>
+  {% endif %}
+</nav>
+
+<nav class="subnav-tabs" aria-label="Data import sections">
+  <a href="{% url 'import_upload' %}" class="{% if import_tab == 'upload' %}active{% endif %}">Import CSV</a>
+  <a href="{% url 'import_pending' %}" class="{% if import_tab == 'pending' %}active{% endif %}">Pending Import CSV files</a>
+  <a href="{% url 'import_recent' %}" class="{% if import_tab == 'recent' %}active{% endif %}">Recent Imports</a>
+</nav>
+
+{% block import_content %}{% endblock %}
+{% endblock %}

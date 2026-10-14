@@ -1,0 +1,44 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Customer Service | WUSA{% endblock %}
+{% block content %}
+<h1>Customer Service</h1>
+<div class="card search-bar">
+  <form method="get" class="search-form">
+    <input type="search" name="q" value="{{ q }}" placeholder="Serial, tester, status, or note" aria-label="Search saunas">
+    <button type="submit">Search</button>
+    {% if q %}<a href="{% url 'customer_service_list' %}">Clear</a>{% endif %}
+  </form>
+</div>
+<div class="card">
+  <table class="tracker-table">
+    <thead>
+      <tr>
+        <th>Serial no</th>
+        <th>Product</th>
+        <th>QC tester name</th>
+        <th>QC status</th>
+        <th>Note</th>
+        <th>QC form</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for unit in units %}
+      <tr>
+        <td><a href="{% url 'customer_service_detail' unit.product_item_id %}">{{ unit.serial_no }}</a></td>
+        <td>{% if unit.product %}{{ unit.product.product_name }}{% else %}—{% endif %}</td>
+        <td>{{ unit.qc_tester_name|default:"—" }}</td>
+        <td><span class="badge status-{{ unit.qc_status }}">{{ unit.get_qc_status_display }}</span></td>
+        <td>{{ unit.note|default:"—" }}</td>
+        <td>
+          {% if unit.qc_form_name %}
+          <a href="{% url 'qc_form_file' unit.product_item_id %}" target="_blank" rel="noopener noreferrer">{{ unit.qc_form_name }}</a>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty">No saunas found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

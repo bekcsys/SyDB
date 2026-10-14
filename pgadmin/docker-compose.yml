@@ -1,0 +1,33 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4:8.14
+    container_name: sauna-pgadmin
+    restart: unless-stopped
+    user: root
+    entrypoint: ["/pgadmin-custom-entrypoint.sh"]
+    env_file:
+      - ../.env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin@tempsensor.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-change_me}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./entrypoint.sh:/pgadmin-custom-entrypoint.sh:ro
+    ports:
+      - "${PGADMIN_PUBLISH_PORT:-5050}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:80/login >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 90s
+
+volumes:
+  pgadmin_data:

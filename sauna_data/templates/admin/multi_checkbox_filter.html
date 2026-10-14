@@ -1,0 +1,27 @@
+{% load i18n %}
+<details data-filter-title="{{ title }}" open>
+  <summary>
+    {% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}
+  </summary>
+  <form method="get" class="checkbox-filter-form">
+    {% for key, values in spec.preserved_params %}
+      {% for value in values %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}">
+      {% endfor %}
+    {% endfor %}
+    <ul class="checkbox-filter">
+      {% for value in spec.option_values %}
+        <li>
+          <label>
+            <input type="checkbox" name="{{ spec.field_path }}" value="{{ value }}" {% if value in spec.selected_values %}checked{% endif %}>
+            <span>{{ value }}</span>
+          </label>
+        </li>
+      {% endfor %}
+    </ul>
+    <div class="checkbox-filter-actions">
+      <button type="submit">Apply</button>
+      <a href="{{ spec.clear_query_string }}">Clear</a>
+    </div>
+  </form>
+</details>

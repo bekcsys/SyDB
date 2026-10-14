@@ -1,0 +1,7 @@
+{% if files %}
+  {% for file in files %}
+  <a href="{{ file.url }}">{{ file.name }}</a>{% if not forloop.last %}<br>{% endif %}
+  {% endfor %}
+{% else %}
+  —
+{% endif %}

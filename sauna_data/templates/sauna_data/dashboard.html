@@ -1,0 +1,62 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Dashboard | Product Test Data{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <span>Dashboard</span>
+</nav>
+
+<h1>Dashboard</h1>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="{% url 'test_run_list' %}">Total Test Runs</a></td>
+        <td>{{ total_test_runs }}</td>
+      </tr>
+      <tr>
+        <td><a href="{% url 'product_model_list' %}">Total Product Models</a></td>
+        <td>{{ total_models }}</td>
+      </tr>
+      <tr>
+        <td><a href="{% url 'product_unit_list' %}">Orders</a></td>
+        <td>{{ total_units }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2> QC - Recent Temp Tests</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>TestID</th>
+        <th>Date</th>
+        <th>Model</th>
+        <th>Serial</th>
+        <th>Tester</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in latest_tests %}
+      <tr>
+        <td><a href="{% url 'test_run_detail' run.test_run_id %}">{{ run.test_run_id }}</a></td>
+        <td>{{ run.test_date }}</td>
+        <td><a href="{% url 'product_model_detail' run.unit.model.model_id %}">{{ run.unit.model.model_name }}</a></td>
+        <td><a href="{% url 'product_unit_detail' run.unit.unit_id %}">{{ run.unit.serial_number }}</a></td>
+        <td>{{ run.tester_name|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No test runs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

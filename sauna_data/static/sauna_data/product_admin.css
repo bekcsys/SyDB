@@ -1,0 +1,106 @@
+#changelist .results {
+  overflow-x: auto;
+}
+
+#changelist #result_list {
+  width: 100%;
+  min-width: 64rem;
+  table-layout: fixed;
+}
+
+#changelist #result_list th,
+#changelist #result_list td {
+  overflow-wrap: break-word;
+  vertical-align: top;
+}
+
+#changelist #result_list th.action-checkbox-column,
+#changelist #result_list td.action-checkbox {
+  width: 2.2rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+}
+
+#changelist #result_list th.column-product_row_id,
+#changelist #result_list td.field-product_row_id {
+  width: 3.4rem;
+  white-space: nowrap;
+  text-align: right;
+}
+
+#changelist #result_list th.column-item_no,
+#changelist #result_list td.field-item_no {
+  width: 9.5rem;
+  white-space: nowrap;
+}
+
+#changelist #result_list th.column-product_name,
+#changelist #result_list td.field-product_name {
+  width: 16%;
+}
+
+#changelist #result_list th.column-voltage,
+#changelist #result_list td.field-voltage,
+#changelist #result_list th.column-wattage,
+#changelist #result_list td.field-wattage,
+#changelist #result_list th.column-cords,
+#changelist #result_list td.field-cords {
+  width: 4.6rem;
+  white-space: nowrap;
+  text-align: right;
+}
+
+#changelist #result_list th.column-plug_type,
+#changelist #result_list td.field-plug_type {
+  width: 7.4rem;
+  white-space: nowrap;
+}
+
+#changelist #result_list th.column-supplier,
+#changelist #result_list td.field-supplier {
+  width: 6.5rem;
+  white-space: nowrap;
+}
+
+#changelist #result_list th.column-linked_power_box,
+#changelist #result_list td.field-linked_power_box {
+  width: 11rem;
+  white-space: nowrap;
+}
+
+#changelist #result_list th.column-linked_control_panel,
+#changelist #result_list td.field-linked_control_panel {
+  width: 10.5rem;
+  white-space: nowrap;
+}
+
+#changelist-filter .checkbox-filter-form {
+  margin: 0.35rem 0 0.6rem;
+}
+
+#changelist-filter .checkbox-filter {
+  max-height: 16rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+#changelist-filter .checkbox-filter label {
+  display: flex;
+  gap: 0.35rem;
+  align-items: flex-start;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+#changelist-filter .checkbox-filter input {
+  margin-top: 0.15rem;
+}
+
+#changelist-filter .checkbox-filter-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}

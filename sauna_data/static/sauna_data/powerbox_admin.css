@@ -1,0 +1,19 @@
+#result_list th.column-power_box_type,
+#result_list td.field-power_box_type {
+  width: 1%;
+  white-space: nowrap;
+}
+
+#result_list th.column-linked_control_panel,
+#result_list td.field-linked_control_panel {
+  width: 1%;
+  white-space: nowrap;
+}
+
+#result_list th.column-part_no,
+#result_list td.field-part_no {
+  width: 1%;
+  white-space: nowrap;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}

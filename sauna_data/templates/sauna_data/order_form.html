@@ -1,0 +1,203 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}{% if is_create %}Create order{% else %}Edit order {{ order.order_no }}{% endif %} | WUSA{% endblock %}
+{% block extra_head %}
+<style>
+  .supplier-filter { border: 0; margin: 0.75rem 0 0; padding: 0; }
+  .supplier-filter legend { font-weight: 600; padding: 0; }
+  .supplier-filter #id_supplier_filter { display: flex; flex-wrap: wrap; gap: 0.85rem 1.25rem; margin-top: 0.35rem; }
+  .supplier-filter ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.85rem 1.25rem; margin: 0.35rem 0 0; padding: 0; }
+  .supplier-filter li { margin: 0; }
+  .stack-form .supplier-filter label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; font-weight: 500; }
+  .stack-form .supplier-filter input { width: auto; max-width: none; padding: 0; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{% if is_create %}Create order{% else %}Edit order {{ order.order_no }}{% endif %}</h1>
+<div class="card">
+  <form method="post" class="stack-form">
+    {% csrf_token %}
+    {% if form.errors %}
+    <div class="form-banner-error" role="alert">
+      <strong>Please fix the highlighted fields.</strong>
+      <ul>
+        {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+        {% for field in form %}
+          {% for error in field.errors %}
+          <li>{{ field.label }}: {{ error }}</li>
+          {% endfor %}
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <label for="{{ form.order_no.id_for_label }}">Order no</label>
+    {{ form.order_no }}
+    <div class="help">The same order number can be used for another sauna. Create a separate entry for each unit.</div>
+    {{ form.order_no.errors }}
+
+    <fieldset class="supplier-filter">
+      <legend>Supplier</legend>
+      {{ form.supplier_filter }}
+      <p class="help">Optional. Check one or more to narrow the product lists.</p>
+    </fieldset>
+    {{ form.supplier_filter.errors }}
+
+    <label for="{{ form.product_category.id_for_label }}">Product category</label>
+    {{ form.product_category }}
+    {{ form.product_category.errors }}
+
+    <label for="{{ form.product.id_for_label }}">Product sub-category</label>
+    <select name="{{ form.product.html_name }}" id="{{ form.product.id_for_label }}" aria-label="Product sub-category" required>
+      <option value="">Select sub-category</option>
+      {% if form.selected_product_id %}
+      <option value="{{ form.selected_product_id }}" selected>{{ form.selected_product_label }}</option>
+      {% endif %}
+    </select>
+    <p class="help" id="selected-item-no">Item no: <strong>—</strong></p>
+    {{ form.product.errors }}
+    {{ form.product_catalog|json_script:"product-catalog" }}
+    <script>
+      (function () {
+        var catalog = JSON.parse(document.getElementById("product-catalog").textContent);
+        var categorySelect = document.getElementById("{{ form.product_category.id_for_label }}");
+        var productSelect = document.getElementById("{{ form.product.id_for_label }}");
+        var output = document.querySelector("#selected-item-no strong");
+
+        function itemNo(productId) {
+          for (var i = 0; i < catalog.length; i++) {
+            if (catalog[i].id === productId) return catalog[i].item_no;
+          }
+          return "";
+        }
+
+        function showItem() {
+          output.textContent = itemNo(productSelect.value) || "—";
+        }
+
+        var categoryOptions = [];
+        Array.prototype.forEach.call(categorySelect.options, function (option) {
+          if (option.value) categoryOptions.push({ value: option.value, label: option.textContent });
+        });
+
+        function selectedSuppliers() {
+          var values = [];
+          document.querySelectorAll('input[name="supplier_filter"]:checked').forEach(function (box) {
+            values.push(box.value);
+          });
+          return values;
+        }
+
+        function supplierMatches(row, suppliers) {
+          return !suppliers.length || suppliers.indexOf(row.supplier) !== -1;
+        }
+
+        function fillCategories(selectedCategory, suppliers) {
+          var available = {};
+          catalog.forEach(function (row) {
+            if (supplierMatches(row, suppliers)) available[row.category] = true;
+          });
+          var current = selectedCategory && available[selectedCategory] ? selectedCategory : "";
+          categorySelect.innerHTML = "";
+          var placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = "Select category";
+          categorySelect.appendChild(placeholder);
+          categoryOptions.forEach(function (item) {
+            if (!available[item.value]) return;
+            var option = document.createElement("option");
+            option.value = item.value;
+            option.textContent = item.label;
+            if (item.value === current) option.selected = true;
+            categorySelect.appendChild(option);
+          });
+          return current;
+        }
+
+        function fillProducts(category, selectedId, suppliers) {
+          productSelect.innerHTML = "";
+          var placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = "Select sub-category";
+          productSelect.appendChild(placeholder);
+          if (!category) {
+            showItem();
+            return;
+          }
+          catalog.forEach(function (row) {
+            if (row.category !== category || !supplierMatches(row, suppliers)) return;
+            var option = document.createElement("option");
+            option.value = row.id;
+            option.textContent = row.name;
+            if (row.id === selectedId) option.selected = true;
+            productSelect.appendChild(option);
+          });
+          showItem();
+        }
+
+        function applyFilters(keepProductId) {
+          var suppliers = selectedSuppliers();
+          var category = fillCategories(categorySelect.value, suppliers);
+          var productId = keepProductId || "";
+          if (productId) {
+            var stillVisible = false;
+            catalog.forEach(function (row) {
+              if (row.id === productId && row.category === category && supplierMatches(row, suppliers)) {
+                stillVisible = true;
+              }
+            });
+            if (!stillVisible) productId = "";
+          }
+          fillProducts(category, productId, suppliers);
+        }
+
+        categorySelect.addEventListener("change", function () {
+          fillProducts(categorySelect.value, "", selectedSuppliers());
+        });
+        productSelect.addEventListener("change", showItem);
+        document.querySelectorAll('input[name="supplier_filter"]').forEach(function (box) {
+          box.addEventListener("change", function () {
+            applyFilters(productSelect.value);
+          });
+        });
+
+        var selectedId = productSelect.value;
+        if (selectedId) {
+          for (var i = 0; i < catalog.length; i++) {
+            if (catalog[i].id === selectedId) {
+              categorySelect.value = catalog[i].category;
+              break;
+            }
+          }
+        }
+        applyFilters(selectedId);
+      })();
+    </script>
+
+    <label for="{{ form.serial_number.id_for_label }}">Serial number</label>
+    {{ form.serial_number }}
+    <div class="help">One sauna serial number per order entry. Quantity is always 1.</div>
+    {{ form.serial_number.errors }}
+
+    <label for="{{ form.order_date.id_for_label }}">Date</label>
+    {{ form.order_date }}
+    {{ form.order_date.errors }}
+
+    <label for="{{ form.customer_no.id_for_label }}">Customer no</label>
+    {{ form.customer_no }}
+    {{ form.customer_no.errors }}
+
+    <label for="{{ form.sales_person.id_for_label }}">Sales person</label>
+    {{ form.sales_person }}
+    {{ form.sales_person.errors }}
+
+    <label for="{{ form.qc_tester.id_for_label }}">QC Person</label>
+    {{ form.qc_tester }}
+    <div class="help">Required. This person is shown on the QC status tracker.</div>
+    {{ form.qc_tester.errors }}
+
+    <button type="submit">{% if is_create %}Create order{% else %}Save order{% endif %}</button>
+    <p><a href="{% url 'order_list' %}">Cancel</a></p>
+  </form>
+</div>
+{% endblock %}

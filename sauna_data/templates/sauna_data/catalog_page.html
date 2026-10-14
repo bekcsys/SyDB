@@ -1,0 +1,154 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}{{ page_title }} | WUSA{% endblock %}
+{% block content %}
+<h1>{{ page_title }}</h1>
+<div class="catalog-stack">
+{% if section == "power_boxes" %}
+<div class="card catalog-section catalog-power-boxes">
+  <table class="product-table">
+    <thead>
+      <tr>
+        <th class="col-narrow col-box-desktop">#</th>
+        <th class="col-box-name">Power boxes</th>
+        <th class="col-box-desktop">Part number</th>
+        <th class="col-box-panel">Control panel</th>
+        <th class="col-box-desktop">Pictures</th>
+        <th class="col-box-firmware">firmware info</th>
+        <th class="col-box-products">Applicable products</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in catalog.power_boxes %}
+      <tr>
+        <td class="col-narrow col-box-desktop">{{ forloop.counter }}</td>
+        <td class="col-box-name">
+          {% if row.pictures %}
+            <a href="{{ row.pictures.0.url }}" target="_blank" rel="noopener noreferrer">{{ row.name }}</a>
+          {% else %}{{ row.name }}{% endif %}
+        </td>
+        <td class="col-box-desktop">{{ row.part_number|default:"—" }}</td>
+        <td class="col-box-panel">
+          {% if row.control_panel_picture %}
+            <a href="{{ row.control_panel_picture.0.url }}" target="_blank" rel="noopener noreferrer">{{ row.control_panel }}</a>
+          {% else %}{{ row.control_panel|default:"—" }}{% endif %}
+        </td>
+        <td class="col-box-desktop">
+          {% if row.pictures %}
+            {% for file in row.pictures %}
+              <a href="{{ file.url }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>{% if not forloop.last %}<br>{% endif %}
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td class="col-box-firmware">
+          {% if row.firmware_info %}
+            <span class="firmware-line">
+              {{ row.firmware_info }}
+              {% for file in row.firmware_files %}
+                <a class="icon-btn" href="{{ file.url }}" target="_blank" rel="noopener noreferrer" title="{{ file.name }}" aria-label="{{ file.name }}">
+                  {% if file.video %}
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                  {% else %}
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                  {% endif %}
+                </a>
+              {% endfor %}
+            </span>
+          {% else %}(None){% endif %}
+        </td>
+        <td class="col-box-products">
+          {% if row.products %}
+            {% for product in row.products %}
+              <a href="{{ product.url }}">{{ product.name }}</a>{% if not forloop.last %}{% if forloop.counter|divisibleby:3 %}<br>{% else %}, {% endif %}{% endif %}
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="empty">None</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif section == "control_panels" %}
+<div class="card catalog-section catalog-control-panels">
+  <table class="product-table">
+    <thead>
+      <tr>
+        <th class="col-narrow col-panel-desktop">#</th>
+        <th class="col-panel-name">Control panels</th>
+        <th class="col-panel-desktop">Part number</th>
+        <th>Firmware instruction</th>
+        <th>Control Panel instruction</th>
+        <th class="col-panel-firmware">Firmware device</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in catalog.control_panels %}
+      <tr>
+        <td class="col-narrow col-panel-desktop">{{ forloop.counter }}</td>
+        <td class="col-panel-name">
+          {% if row.picture %}
+            <a href="{{ row.picture.0.url }}" target="_blank" rel="noopener noreferrer">{{ row.name }}</a>
+          {% else %}{{ row.name }}{% endif %}
+        </td>
+        <td class="col-panel-desktop">{{ row.part_number|default:"—" }}</td>
+        <td>
+          {% if row.documentation_1 %}
+            <a href="{{ row.documentation_1.0.url }}" target="_blank" rel="noopener noreferrer">{{ row.documentation_1.0.name }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if row.documentation_2 %}
+            <a href="{{ row.documentation_2.0.url }}" target="_blank" rel="noopener noreferrer">{{ row.documentation_2.0.name }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="col-panel-firmware">{{ row.firmware_device|default:"(None)" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty">None</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card catalog-section catalog-firmware">
+  <table class="product-table">
+    <thead>
+      <tr>
+        <th class="col-narrow">#</th>
+        <th>Firmware update device name</th>
+        <th>Target device</th>
+        <th>Instruction document</th>
+        <th>Instruction video</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in catalog.firmware_instructions %}
+      <tr>
+        <td class="col-narrow">{{ forloop.counter }}</td>
+        <td>{{ row.name }}</td>
+        <td>
+          {% if row.target.url %}
+            <a href="{{ row.target.url }}" target="_blank" rel="noopener noreferrer">{{ row.target.name }}</a>
+          {% else %}{{ row.target.name }}{% endif %}
+        </td>
+        <td>
+          {% if row.document %}
+            <a href="{{ row.document.url }}" target="_blank" rel="noopener noreferrer">{{ row.document.name }}</a>
+          {% else %}(None){% endif %}
+        </td>
+        <td>
+          {% if row.video %}
+            <a href="{{ row.video.url }}" target="_blank" rel="noopener noreferrer">{{ row.video.name }}</a>
+          {% else %}(None){% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="empty">None</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+</div>
+{% endblock %}

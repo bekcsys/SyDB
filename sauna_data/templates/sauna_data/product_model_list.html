@@ -1,0 +1,89 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Product Models | Product Test Data{% endblock %}
+{% block extra_head %}
+<style>
+  .column-filters select { width: 100%; min-width: 5rem; padding: .35rem; font-size: 0.9rem; }
+  .column-filters th { font-weight: normal; border-bottom: 1px solid #e5e7eb; }
+  .filter-actions { margin-top: 0.75rem; display: flex; gap: 0.75rem; align-items: center; }
+  .filter-actions button { margin-top: 0; }
+  .filter-actions a { color: #1f3a5f; font-size: 0.9rem; }
+</style>
+{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'product_model_list' %}">Models &amp; Orders</a>
+  <span aria-hidden="true">/</span>
+  <span>Models</span>
+</nav>
+
+<h1>Product Models</h1>
+<div class="card">
+  <form method="get">
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Supplier</th>
+          <th>Rated voltage</th>
+          <th>Rated power (W)</th>
+          <th>Orders</th>
+        </tr>
+        <tr class="column-filters">
+          <th></th>
+          <th>{{ form.supplier }}</th>
+          <th>{{ form.rated_voltage }}</th>
+          <th>{{ form.rated_power_watts }}</th>
+          <th>{{ form.orders }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for model in product_models %}
+        <tr>
+          <td><a href="{% url 'product_model_detail' model.model_id %}">{{ model.model_name }}</a></td>
+          <td>{{ model.get_supplier_display|default:"—" }}</td>
+          <td>{{ model.rated_voltage|default:"—" }}</td>
+          <td>{{ model.rated_power_watts|default:"—" }}</td>
+          <td>{{ model.unit_count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No matching product models.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="filter-actions">
+      <button type="submit">Filter</button>
+      <a href="{% url 'product_model_list' %}">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Power box and controls</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Power box</th>
+        <th>Models</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for group in powerbox_model_groups %}
+      <tr>
+        <td>{{ group.powerbox_type.name }}</td>
+        <td>
+          {% for model in group.models %}
+          <a href="{% url 'product_model_detail' model.model_id %}">{{ model.model_name }}</a>{% if not forloop.last %}, {% endif %}
+          {% empty %}
+          —
+          {% endfor %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2">No power box types defined.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

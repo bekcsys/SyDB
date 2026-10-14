@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+staticfiles/
+data/
+pgadmin/
+.git/
+.gitignore
+*.md
+docs/
+scripts/run_dev.sh
+scripts/setup_venv.sh
+scripts/activate_venv.sh
+src/

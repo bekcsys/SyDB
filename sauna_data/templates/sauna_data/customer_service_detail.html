@@ -1,0 +1,29 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}{{ unit.serial_no }} | Customer Service{% endblock %}
+{% block main_class %}page-unit{% endblock %}
+{% block content %}
+<div class="unit-page-head">
+  <h1>Serial {{ unit.serial_no }}</h1>
+  <a class="unit-back" href="{% url 'physical_unit_list' %}">Back to QC &amp; CS</a>
+</div>
+<p class="cs-view-note">View only. Customer Service cannot change QC records.</p>
+<div class="card unit-summary">
+  <h2>QC</h2>
+  <dl>
+    <dt>Product</dt>
+    <dd>{% if unit.product %}{{ unit.product.product_name }}{% else %}—{% endif %}</dd>
+    <dt>QC tester name</dt>
+    <dd>{{ unit.qc_tester_name|default:"—" }}</dd>
+    <dt>QC status</dt>
+    <dd><span class="badge status-{{ unit.qc_status }}">{{ unit.get_qc_status_display }}</span></dd>
+    <dt>Note</dt>
+    <dd>{{ unit.note|default:"—" }}</dd>
+    <dt>QC form</dt>
+    <dd>
+      {% if unit.qc_form_name %}
+      <a href="{% url 'qc_form_file' unit.product_item_id %}" target="_blank" rel="noopener noreferrer">{{ unit.qc_form_name }}</a>
+      {% else %}—{% endif %}
+    </dd>
+  </dl>
+</div>
+{% endblock %}

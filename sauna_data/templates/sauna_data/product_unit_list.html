@@ -1,0 +1,47 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Orders | Product Test Data{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'product_model_list' %}">Models &amp; Orders</a>
+  <span aria-hidden="true">/</span>
+  <span>Orders</span>
+</nav>
+
+<h1>Orders</h1>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Serial Number</th>
+        <th>Model</th>
+        <th>Supplier</th>
+        <th>PowerBox Type</th>
+        <th>Wattage</th>
+        <th>Total Tests</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for unit in product_units %}
+      <tr>
+        <td><a href="{% url 'product_unit_detail' unit.unit_id %}">{{ unit.serial_number }}</a></td>
+        <td><a href="{% url 'product_model_detail' unit.model.model_id %}">{{ unit.model.model_name }}</a></td>
+        <td>{{ unit.model.get_supplier_display|default:"—" }}</td>
+        <td>{{ unit.powerbox_type|default:"—" }}</td>
+        <td>{% if unit.display_wattage is not None %}{{ unit.display_wattage }} W{% else %}—{% endif %}</td>
+        <td>
+          {% if unit.test_count %}
+          <a href="{% url 'test_run_list' %}?search_type=serial&amp;q={{ unit.serial_number|urlencode }}">{{ unit.test_count }}</a>
+          {% else %}
+          0
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No orders yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

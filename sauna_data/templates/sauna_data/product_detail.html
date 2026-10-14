@@ -1,0 +1,64 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}{{ product.item_no }} | WUSA{% endblock %}
+{% block content %}
+<h1>{{ product.product_name }}</h1>
+<div class="product-detail-main">
+  <div class="product-detail-side">
+    <div class="card unit-summary product-summary">
+      <h2>Summary</h2>
+      <dl>
+        <dt>Item no.</dt>
+        <dd>{{ product.item_no }}</dd>
+        <dt>Voltage</dt>
+        <dd>{{ product.voltage }} V</dd>
+        <dt>Plug type</dt>
+        <dd>{{ product.get_plug_type_display|default:"—" }}</dd>
+        <dt>Wattage</dt>
+        <dd>{{ product.wattage }} W</dd>
+        <dt>Watt on label</dt>
+        <dd>{% if product.watt_on_label %}{{ product.watt_on_label }} W{% else %}—{% endif %}</dd>
+        <dt>Supplier</dt>
+        <dd>{{ product.supplier }}</dd>
+        <dt>Power box type</dt>
+        <dd>{{ product.power_box_type_label|default:"—" }}</dd>
+        <dt>Control panel type</dt>
+        <dd>{{ product.control_panel_type_label|default:"—" }}</dd>
+        <dt>Number of cords</dt>
+        <dd>{{ product.number_of_cords }}</dd>
+        <dt>Units</dt>
+        <dd>{{ unit_count }}</dd>
+      </dl>
+    </div>
+    <section class="card unit-summary product-detail-note">
+      <h2>Firmware update instruction</h2>
+      {% include "sauna_data/_support_files.html" with files=qc_support.firmware_updates %}
+    </section>
+    <section class="card unit-summary product-detail-note">
+      <h2>Control panel instruction</h2>
+      {% include "sauna_data/_support_files.html" with files=qc_support.panel_instructions %}
+    </section>
+  </div>
+  <div class="product-detail-media">
+    <section class="card unit-summary product-detail-photo">
+      <h2>Control panel picture</h2>
+      {% if qc_support.panels %}
+        {% for panel in qc_support.panels %}
+          {% include "sauna_data/_support_files.html" with files=panel.pictures pictures=True wide=True %}
+        {% endfor %}
+      {% else %}
+        <p class="qc-support-empty">None</p>
+      {% endif %}
+    </section>
+    <section class="card unit-summary product-detail-photo">
+      <h2>Power box picture</h2>
+      {% if qc_support.boxes %}
+        {% for box in qc_support.boxes %}
+          {% include "sauna_data/_support_files.html" with files=box.pictures pictures=True %}
+        {% endfor %}
+      {% else %}
+        <p class="qc-support-empty">None</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

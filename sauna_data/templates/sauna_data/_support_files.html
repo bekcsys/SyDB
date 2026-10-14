@@ -1,0 +1,13 @@
+{% if pictures %}
+  {% if files %}
+  <div class="qc-support-photos">
+    {% for file in files %}
+    <a href="{{ file.url }}" target="_blank" rel="noopener"><img class="qc-support-photo{% if wide %} qc-support-photo-wide{% endif %}" src="{{ file.url }}" alt="{{ file.name }}"></a>
+    {% endfor %}
+  </div>
+  {% else %}<span class="qc-support-empty">None</span>{% endif %}
+{% elif files %}
+<ul class="qc-support-file-list">
+  {% for file in files %}<li><a href="{{ file.url }}" target="_blank" rel="noopener">{{ file.name }}</a></li>{% endfor %}
+</ul>
+{% else %}None{% endif %}

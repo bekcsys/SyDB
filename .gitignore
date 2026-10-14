@@ -1,0 +1,13 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+staticfiles/
+*.sqlite3
+data/import_pending/*.csv
+data/archive/**/*.csv
+data/backups/*.sql.gz
+data/backups/*.tar.gz
+data/logs/*.log
+data/qc_media/

@@ -1,0 +1,7 @@
+# Pull pre-built WebApp image from Docker Hub instead of building locally.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.hub.yml up -d
+
+services:
+  django_web:
+    image: ${DOCKER_IMAGE_WEBAPP:-becktkh/tempsensor-webapp}:${DOCKER_TAG:-latest}
+    pull_policy: always

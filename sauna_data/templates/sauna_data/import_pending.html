@@ -1,0 +1,38 @@
+{% extends "sauna_data/import_base.html" %}
+{% block title %}Pending Import CSV files | Product Test Data{% endblock %}
+{% block import_content %}
+<h1>Pending Import CSV files</h1>
+<div class="card">
+  <p>Place CSV files in <code>data/import_pending/</code>, then run import.</p>
+  <ul>
+    {% for path in pending_files %}
+    <li>{{ path.name }}</li>
+    {% empty %}
+    <li>No pending CSV files.</li>
+    {% endfor %}
+  </ul>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit">Import all pending files</button>
+  </form>
+  {% if batch_summaries %}
+  <h2>Import results</h2>
+  {% for summary in batch_summaries %}
+  <div class="import-result">
+    <p><strong>File:</strong> {{ summary.file_name }}</p>
+    <p class="{% if summary.status == 'success' %}success{% else %}failed{% endif %}">
+      <strong>Status:</strong> {{ summary.status }}
+    </p>
+    {% if summary.test_run_id %}<p><strong>TestID:</strong> {{ summary.test_run_id }}</p>{% endif %}
+    <p><strong>Rows:</strong> {{ summary.rows_imported }}</p>
+    <p><strong>Sensors:</strong> {{ summary.sensors_detected }}</p>
+    <p><strong>Duration:</strong> {{ summary.duration_seconds|floatformat:2 }} s</p>
+    {% if summary.archive_path %}<p><strong>Archived:</strong> {{ summary.archive_path }}</p>{% endif %}
+    {% if summary.error_message %}<p><strong>Error:</strong> {{ summary.error_message }}</p>{% endif %}
+  </div>
+  {% empty %}
+  <p>No files were processed.</p>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

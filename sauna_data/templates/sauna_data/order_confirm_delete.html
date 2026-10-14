@@ -1,0 +1,19 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Delete order {{ order.order_no }} | WUSA{% endblock %}
+{% block content %}
+<h1>Delete order {{ order.order_no }}</h1>
+<div class="card">
+  {% if delete_error %}
+  <div class="form-banner-error" role="alert">{{ delete_error }}</div>
+  {% endif %}
+  <p>Delete order <strong>{{ order.order_no }}</strong> for product {{ order.item_no }}?</p>
+  <p class="help">Physical items and test history stay in the system. They will no longer be linked to this order.</p>
+  <form method="post">
+    {% csrf_token %}
+    <div class="toolbar">
+      <button type="submit" class="button-danger">Delete order</button>
+      <a href="{% url 'order_detail' order.order_id %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

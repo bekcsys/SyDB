@@ -1,0 +1,29 @@
+{% extends "sauna_data/base.html" %}
+{% block title %}Order {{ order.order_no }} | WUSA{% endblock %}
+{% block content %}
+<h1>Order {{ order.order_no }}</h1>
+<div class="toolbar">
+  <a class="button" href="{% url 'order_edit' order.order_id %}">Edit order</a>
+</div>
+<div class="card meta">
+  <p><strong>Serial:</strong>
+    {% if unit %}
+    <a href="{% url 'physical_unit_detail' unit.unit_id %}">{{ unit.item_serial_no }}</a>
+    {% else %}
+    —
+    {% endif %}
+  </p>
+  <p><strong>Item no:</strong> {{ order.item_no }}</p>
+  <p><strong>Product:</strong> <a href="{% url 'product_detail' order.product_id %}">{{ order.product.product_name }}</a></p>
+  <p><strong>Customer:</strong> {{ order.customer_no }}</p>
+  <p><strong>Order date:</strong> {{ order.order_date }}</p>
+  <p><strong>Sales person:</strong> {{ order.sales_person }}</p>
+  <p><strong>QC status:</strong>
+    {% if unit %}
+    <span class="badge status-{{ unit.unit_status }}">{{ unit.get_unit_status_display }}</span>
+    {% else %}
+    —
+    {% endif %}
+  </p>
+</div>
+{% endblock %}
