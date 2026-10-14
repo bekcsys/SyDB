@@ -228,3 +228,47 @@ class ProductItem(models.Model):
 
     def __str__(self) -> str:
         return self.serial_no
+
+
+class ProductIssue(models.Model):
+    class Status(models.TextChoices):
+        NOT_STARTED = "NOT_STARTED", "Not Started"
+        IN_PROGRESS = "IN_PROGRESS", "In Progress"
+        SOLVED = "SOLVED", "Solved"
+
+    OPEN_STATUSES = (Status.NOT_STARTED, Status.IN_PROGRESS)
+
+    product_issue_id = models.BigAutoField(primary_key=True)
+    products = models.ManyToManyField(
+        Product,
+        related_name="issues",
+        db_table="product_issue_products",
+    )
+    date = models.DateField()
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.NOT_STARTED,
+    )
+    note = models.TextField(blank=True, default="")
+    doc_ref = models.CharField(max_length=80, blank=True, default="", verbose_name="Doc")
+    documentation = models.BinaryField(null=True, blank=True, editable=False)
+    documentation_name = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "product_issues"
+        ordering = ("-date", "-product_issue_id")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=["NOT_STARTED", "IN_PROGRESS", "SOLVED"]),
+                name="product_issues_status_valid",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["-date"], name="idx_product_issues_date"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.date} {self.get_status_display()}"

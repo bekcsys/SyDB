@@ -1,6 +1,8 @@
 .env
 .venv/
 venv/
+.tools/
+frontend/node_modules/
 __pycache__/
 *.py[cod]
 *.pyo

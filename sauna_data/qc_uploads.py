@@ -75,13 +75,17 @@ def next_slot_filename(
 ) -> str:
     suffix = Path(original_name or "").suffix.lower()
     if slot_allows_multiple(slot):
-        taken = {name.lower() for name in existing_names}
+        taken = set()
+        prefix = f"{slot.lower()}_"
+        for name in existing_names:
+            stem = Path(name).stem.lower()
+            number = stem[len(prefix):]
+            if stem.startswith(prefix) and number.isdigit():
+                taken.add(int(number))
         index = 1
-        while True:
-            name = f"{slot}_{index}{suffix}"
-            if name.lower() not in taken:
-                return name
+        while index in taken:
             index += 1
+        return f"{slot}_{index}{suffix}"
     if slot == "form":
         moment = uploaded_at or datetime.now(CHICAGO)
         if moment.tzinfo is None:

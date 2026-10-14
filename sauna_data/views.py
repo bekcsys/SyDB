@@ -1,23 +1,24 @@
 from pathlib import Path
-from urllib.parse import urlencode
+import mimetypes
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 from django.db.utils import DataError
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.http import content_disposition_header
 
 from sauna_data.forms import PhysicalUnitQcForm
-from sauna_data.models import Product, ProductItem
-from sauna_data.qc_support import (
-    catalog_file,
-    product_page_catalog,
-    qc_support_for_product,
-    support_file,
-)
+from sauna_data.models import Product, ProductIssue, ProductItem
+from sauna_data.qc_support import catalog_file, support_file
 
 UNIT_SAVE_FAILED = "This QC status could not be saved. Check your entries and try again."
+
+
+@ensure_csrf_cookie
+def render_app(request: HttpRequest, title: str) -> HttpResponse:
+    return render(request, "sauna_data/app_shell.html", {"page_title": title})
 
 
 def _search_term(request: HttpRequest) -> str:
@@ -34,6 +35,7 @@ PRODUCT_SORT_FIELDS = {
     "supplier": "supplier",
     "cords": "number_of_cords",
     "power_box": "power_box__name",
+    "known_issues": "known_issue_count",
 }
 POWER_BOX_FILTERS = (
     ("luis", "Luis"),
@@ -80,7 +82,7 @@ def _product_family_filter(family: str) -> Q:
     return Q(product_name__icontains="redfit room")
 
 
-def product_list(request: HttpRequest) -> HttpResponse:
+def product_list_query(request: HttpRequest) -> tuple[QuerySet[Product], dict]:
     choices = supplier_choices()
     supplier_names = {name.casefold(): name for name in choices}
     supplier_filters = _supplier_filters(choices)
@@ -93,6 +95,8 @@ def product_list(request: HttpRequest) -> HttpResponse:
         "power_box__control_panel__picture",
         "power_box__control_panel__documentation_1",
         "power_box__control_panel__documentation_2",
+    ).annotate(
+        known_issue_count=Count("issues", distinct=True)
     )
     query = _search_term(request)
     if query:
@@ -137,32 +141,21 @@ def product_list(request: HttpRequest) -> HttpResponse:
     if direction == "desc":
         sort_field = f"-{sort_field}"
     queryset = queryset.order_by(sort_field, "product_id")
-    filter_params = {}
-    if query:
-        filter_params["q"] = query
-    if supplier:
-        filter_params["supplier"] = supplier
-    elif box:
-        filter_params["box"] = box
-    elif family:
-        filter_params["family"] = family
-    return render(
-        request,
-        "sauna_data/product_list.html",
-        {
-            "products": queryset,
-            "q": query,
-            "sort": sort,
-            "dir": direction,
-            "supplier": supplier,
-            "suppliers": supplier_filters,
-            "box": box,
-            "boxes": POWER_BOX_FILTERS,
-            "family": family,
-            "families": PRODUCT_FAMILY_FILTERS,
-            "filter_query": urlencode(filter_params),
-        },
-    )
+    return queryset, {
+        "q": query,
+        "sort": sort,
+        "dir": direction,
+        "supplier": supplier,
+        "suppliers": supplier_filters,
+        "box": box,
+        "boxes": POWER_BOX_FILTERS,
+        "family": family,
+        "families": PRODUCT_FAMILY_FILTERS,
+    }
+
+
+def product_list(request: HttpRequest) -> HttpResponse:
+    return render_app(request, "Products")
 
 
 def catalog_section(request: HttpRequest, section: str) -> HttpResponse:
@@ -171,31 +164,12 @@ def catalog_section(request: HttpRequest, section: str) -> HttpResponse:
         "control_panels": "Control panels",
         "firmware_instructions": "Firmware instructions",
     }
-    return render(
-        request,
-        "sauna_data/catalog_page.html",
-        {
-            "catalog": product_page_catalog(),
-            "section": section,
-            "page_title": titles[section],
-        },
-    )
+    return render_app(request, titles[section])
 
 
 def product_detail(request: HttpRequest, product_id: int) -> HttpResponse:
-    product = get_object_or_404(
-        Product.objects.select_related("power_box", "power_box__control_panel"),
-        pk=product_id,
-    )
-    return render(
-        request,
-        "sauna_data/product_detail.html",
-        {
-            "product": product,
-            "unit_count": product.product_items.count(),
-            "qc_support": qc_support_for_product(product),
-        },
-    )
+    product = get_object_or_404(Product.objects.only("product_id", "product_name"), pk=product_id)
+    return render_app(request, product.product_name)
 
 
 TRACKER_SHORTCUT_FILTERS = (
@@ -213,8 +187,8 @@ TRACKER_SORT_FIELDS = {
 }
 
 
-def physical_unit_list(request: HttpRequest) -> HttpResponse:
-    queryset: QuerySet[ProductItem] = ProductItem.objects.select_related("product")
+def unit_list_query(request: HttpRequest) -> tuple[QuerySet[ProductItem], dict]:
+    queryset: QuerySet[ProductItem] = ProductItem.objects.select_related("product").defer("qc_form")
     query = _search_term(request)
     if query:
         queryset = queryset.filter(
@@ -240,18 +214,17 @@ def physical_unit_list(request: HttpRequest) -> HttpResponse:
     if direction == "desc":
         sort_field = f"-{sort_field}"
     units = queryset.order_by(sort_field, "product_item_id")
-    return render(
-        request,
-        "sauna_data/physical_unit_list.html",
-        {
-            "units": units,
-            "q": query,
-            "sort": sort,
-            "dir": direction,
-            "pick": pick,
-            "filters": TRACKER_SHORTCUT_FILTERS,
-        },
-    )
+    return units, {
+        "q": query,
+        "sort": sort,
+        "dir": direction,
+        "pick": pick,
+        "filters": TRACKER_SHORTCUT_FILTERS,
+    }
+
+
+def physical_unit_list(request: HttpRequest) -> HttpResponse:
+    return render_app(request, "QC & CS")
 
 
 def _safe_filename(name: str) -> str:
@@ -284,11 +257,12 @@ def physical_unit_detail(request: HttpRequest, unit_id: int) -> HttpResponse:
                 return redirect("physical_unit_list")
             except (IntegrityError, DataError, ValueError):
                 form.add_error(None, UNIT_SAVE_FAILED)
-    return render(
-        request,
-        "sauna_data/physical_unit_detail.html",
-        {"unit": unit, "form": form},
-    )
+        return render(
+            request,
+            "sauna_data/physical_unit_detail.html",
+            {"unit": unit, "form": form},
+        )
+    return render_app(request, f"Serial {unit.serial_no}")
 
 
 def customer_service_list(request: HttpRequest) -> HttpResponse:
@@ -298,12 +272,8 @@ def customer_service_list(request: HttpRequest) -> HttpResponse:
 def customer_service_detail(request: HttpRequest, unit_id: int) -> HttpResponse:
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
-    unit = get_object_or_404(ProductItem, pk=unit_id)
-    return render(
-        request,
-        "sauna_data/customer_service_detail.html",
-        {"unit": unit},
-    )
+    unit = get_object_or_404(ProductItem.objects.only("product_item_id", "serial_no"), pk=unit_id)
+    return render_app(request, f"Serial {unit.serial_no}")
 
 
 def catalog_support_file(request: HttpRequest, kind: str, owner_id: int, slot: str) -> HttpResponse:
@@ -327,4 +297,14 @@ def qc_form_file(request: HttpRequest, unit_id: int) -> HttpResponse:
         raise Http404()
     response = HttpResponse(bytes(unit.qc_form), content_type="application/pdf")
     response["Content-Disposition"] = content_disposition_header(False, unit.qc_form_name)
+    return response
+
+
+def product_issue_file(request: HttpRequest, product_id: int, issue_id: int) -> HttpResponse:
+    issue = get_object_or_404(ProductIssue, pk=issue_id, products__pk=product_id)
+    if not issue.documentation or not issue.documentation_name:
+        raise Http404()
+    content_type = mimetypes.guess_type(issue.documentation_name)[0] or "application/octet-stream"
+    response = HttpResponse(bytes(issue.documentation), content_type=content_type)
+    response["Content-Disposition"] = content_disposition_header(False, issue.documentation_name)
     return response

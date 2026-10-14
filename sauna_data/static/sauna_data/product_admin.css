@@ -74,6 +74,21 @@
   white-space: nowrap;
 }
 
+#changelist #result_list th.column-issue_id,
+#changelist #result_list td.field-issue_id {
+  width: 4.2rem;
+  white-space: nowrap;
+}
+
+#changelist #result_list th.column-doc_ref,
+#changelist #result_list td.field-doc_ref {
+  width: 12rem;
+}
+
+#changelist #result_list td.field-doc_ref select {
+  max-width: 11rem;
+}
+
 #changelist-filter .checkbox-filter-form {
   margin: 0.35rem 0 0.6rem;
 }

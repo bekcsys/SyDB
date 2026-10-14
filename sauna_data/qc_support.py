@@ -35,6 +35,71 @@ _PANEL_DOCS = ("documentation", "documentation-2")
 _BOX_FIRMWARE_FILES = ("firmware-document", "firmware-video")
 
 
+def instruction_document_choices() -> list[tuple[str, str]]:
+    choices = [("", "—")]
+    panels = ControlPanel.objects.order_by("name").only(
+        "control_panel_id",
+        "name",
+        "documentation_1_name",
+        "documentation_2_name",
+    )
+    for panel in panels:
+        if panel.documentation_1_name:
+            choices.append(
+                (
+                    f"control-panel:{panel.pk}:documentation",
+                    f"{panel.name} · {panel.documentation_1_name}",
+                )
+            )
+        if panel.documentation_2_name:
+            choices.append(
+                (
+                    f"control-panel:{panel.pk}:documentation-2",
+                    f"{panel.name} · {panel.documentation_2_name}",
+                )
+            )
+    boxes = PowerBox.objects.order_by("name").only(
+        "power_box_id",
+        "name",
+        "firmware_document_name",
+        "firmware_video_name",
+    )
+    for box in boxes:
+        if box.firmware_document_name:
+            choices.append(
+                (
+                    f"power-box:{box.pk}:firmware-document",
+                    f"{box.name} · {box.firmware_document_name}",
+                )
+            )
+        if box.firmware_video_name:
+            choices.append(
+                (
+                    f"power-box:{box.pk}:firmware-video",
+                    f"{box.name} · {box.firmware_video_name}",
+                )
+            )
+    return choices
+
+
+def instruction_document(ref: str) -> tuple[str, str]:
+    parts = (ref or "").split(":")
+    if len(parts) != 3:
+        return "", ""
+    kind, raw_id, slot = parts
+    allowed = {"control-panel": _PANEL_DOCS, "power-box": _BOX_FIRMWARE_FILES}
+    if slot not in allowed.get(kind, ()):
+        return "", ""
+    try:
+        owner_id = int(raw_id)
+    except ValueError:
+        return "", ""
+    label = dict(instruction_document_choices()).get(ref, "")
+    if not label:
+        return "", ""
+    return reverse("catalog_file", args=[kind, owner_id, slot]), label
+
+
 def _files(owner, slots: tuple[str, ...], product_id: int, kind: str, owner_id: int) -> list[dict[str, str]]:
     slot_map = {
         "control-panel": _PANEL_SLOTS,
@@ -161,7 +226,7 @@ def product_page_catalog() -> dict:
             Prefetch(
                 "products",
                 queryset=Product.objects.only(
-                    "product_id", "item_no", "product_name", "power_box_id"
+                    "product_id", "item_no", "product_name", "power_box_id", "supplier"
                 ).order_by("product_name", "item_no"),
             )
         )
@@ -174,6 +239,8 @@ def product_page_catalog() -> dict:
     ).order_by("name")
     box_rows = []
     firmware_rows = []
+    boxes_by_panel: dict[str, list[str]] = {}
+    suppliers_by_panel: dict[str, set[str]] = {}
     for box in boxes:
         firmware_files = catalog_links(box, "power-box", _BOX_FIRMWARE_FILES)
         box_rows.append(
@@ -198,6 +265,11 @@ def product_page_catalog() -> dict:
                 ],
             }
         )
+        if box.control_panel_id:
+            boxes_by_panel.setdefault(box.control_panel.name, []).append(box.name)
+            suppliers_by_panel.setdefault(box.control_panel.name, set()).update(
+                product.supplier for product in box.products.all() if product.supplier
+            )
         if box.firmware_info:
             firmware_rows.append(
                 {
@@ -218,6 +290,8 @@ def product_page_catalog() -> dict:
                 "documentation_1": catalog_links(panel, "control-panel", ("documentation",)),
                 "documentation_2": catalog_links(panel, "control-panel", ("documentation-2",)),
                 "firmware_device": panel.firmware_device,
+                "power_boxes": boxes_by_panel.get(panel.name, []),
+                "suppliers": sorted(suppliers_by_panel.get(panel.name, ())),
             }
         )
         if panel.firmware_device:

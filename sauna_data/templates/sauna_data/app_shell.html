@@ -1,0 +1,31 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} | WUSA</title>
+  <link rel="stylesheet" href="{% static 'app/assets/style.css' %}">
+</head>
+<body>
+  <div hidden>{% csrf_token %}</div>
+  {% with url_name=request.resolver_match.url_name %}
+  <div class="app-frame">
+    <aside class="sidebar">
+      <a class="brand" href="{% url 'product_list' %}">SaunaKB</a>
+      <p class="brand-kicker">WUSA</p>
+      <nav class="nav" aria-label="Main">
+        <a class="nav-link{% if url_name == 'product_list' or url_name == 'product_detail' %} is-active{% endif %}" href="{% url 'product_list' %}">Products</a>
+        <a class="nav-link{% if url_name == 'power_box_list' %} is-active{% endif %}" href="{% url 'power_box_list' %}">Power boxes</a>
+        <a class="nav-link{% if url_name == 'control_panel_list' %} is-active{% endif %}" href="{% url 'control_panel_list' %}">Control panels</a>
+        <a class="nav-link{% if url_name == 'firmware_instruction_list' %} is-active{% endif %}" href="{% url 'firmware_instruction_list' %}">Firmware instructions</a>
+        <a class="nav-link{% if url_name == 'physical_unit_list' or url_name == 'physical_unit_list_alt' or url_name == 'physical_unit_detail' or url_name == 'customer_service_list' or url_name == 'customer_service_detail' %} is-active{% endif %}" href="{% url 'physical_unit_list' %}">QC &amp; CS</a>
+      </nav>
+      <a class="admin-link" href="/admin/">Django Admin</a>
+    </aside>
+    <main id="root"></main>
+  </div>
+  {% endwith %}
+  <script type="module" src="{% static 'app/assets/app.js' %}"></script>
+</body>
+</html>

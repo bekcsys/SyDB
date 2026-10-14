@@ -7,15 +7,19 @@ from django.db.models import Prefetch
 from django.http import Http404, HttpResponse
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
 from django.utils.http import content_disposition_header
 
 from sauna_data.models import (
     ControlPanel,
+    ProductIssue,
     ProductItem,
     PowerBox,
     Product,
 )
 from sauna_data.power_boxes import associated_product_label
+from sauna_data.product_issues import group_products
+from sauna_data.qc_support import instruction_document, instruction_document_choices
 
 
 class EditableModelAdmin(admin.ModelAdmin):
@@ -702,6 +706,7 @@ class ProductItemAdmin(EditableModelAdmin):
 
 _ADMIN_MODEL_ORDER = (
     "Product",
+    "ProductIssue",
     "PowerBox",
     "ControlPanel",
     "ProductItem",
@@ -732,3 +737,294 @@ def _ordered_app_list(request, app_label=None):
 
 
 admin.site.get_app_list = _ordered_app_list
+
+
+class GroupedProductCheckbox(forms.Widget):
+    def __init__(self, attrs=None):
+        self.groups = []
+        super().__init__(attrs)
+
+    def value_from_datadict(self, data, files, name):
+        if hasattr(data, "getlist"):
+            return data.getlist(name)
+        value = data.get(name)
+        if value in (None, ""):
+            return []
+        return value
+
+    def render(self, name, value, attrs=None, renderer=None):
+        selected = set()
+        if hasattr(value, "values_list"):
+            selected = {str(pk) for pk in value.values_list("pk", flat=True)}
+        elif value:
+            selected = {str(getattr(item, "pk", item)) for item in value}
+        sections = []
+        for group in self.groups:
+            families = []
+            for family in group["families"]:
+                boxes = format_html_join(
+                    "",
+                    '<li><label><input type="checkbox" name="{}" value="{}"{}> {}</label></li>',
+                    (
+                        (
+                            name,
+                            product["id"],
+                            mark_safe(' checked') if str(product["id"]) in selected else "",
+                            product["label"],
+                        )
+                        for product in family["products"]
+                    ),
+                )
+                family_select = ""
+                if len(group["families"]) > 1:
+                    family_select = format_html(
+                        '<label class="issue-family-all"><input type="checkbox" data-select="family"> All {}</label>',
+                        family["name"],
+                    )
+                families.append(
+                    format_html(
+                        '<div data-issue-family>{}<ul class="issue-product-list">{}</ul></div>',
+                        family_select,
+                        boxes,
+                    )
+                )
+            title = group["prefix"]
+            if len(group["families"]) == 1:
+                title = f'{group["families"][0]["name"]} · {group["prefix"]}'
+            sections.append(
+                format_html(
+                    '<section data-issue-prefix><label class="issue-family-all">'
+                    '<input type="checkbox" data-select="prefix"> All {}</label>{}</section>',
+                    title,
+                    mark_safe("".join(str(block) for block in families)),
+                )
+            )
+        body = mark_safe("".join(str(section) for section in sections)) if sections else "No products."
+        return format_html(
+            '<div class="issue-groups">{}</div>'
+            '<style>'
+            '.issue-groups{{max-height:34rem;overflow:auto;border:1px solid #ccc;padding:10px 12px;background:#fff}}'
+            '.issue-groups section{{margin:0 0 14px}}'
+            '.issue-family-all{{font-weight:700}}'
+            '.issue-product-list{{margin:4px 0 8px 1.5rem}}'
+            '</style>'
+            '<script>'
+            '(function(){{'
+            'document.querySelectorAll("[data-issue-prefix]").forEach(function(prefix){{'
+            'var prefixBox=prefix.querySelector("[data-select=prefix]");'
+            'var products=function(){{return prefix.querySelectorAll("input[name=\'{name}\']");}};'
+            'function sync(box,inputs){{inputs.forEach(function(input){{input.checked=box.checked;}});}}'
+            'prefixBox.addEventListener("change",function(){{'
+            'sync(prefixBox,Array.from(products()));'
+            'prefix.querySelectorAll("[data-select=family]").forEach(function(box){{box.checked=prefixBox.checked;}});'
+            '}});'
+            'prefix.querySelectorAll("[data-issue-family]").forEach(function(family){{'
+            'var familyBox=family.querySelector("[data-select=family]");'
+            'if(!familyBox)return;'
+            'familyBox.addEventListener("change",function(){{sync(familyBox,Array.from(family.querySelectorAll("input[name=\'{name}\']")));}});'
+            '}});'
+            '}});'
+            '}})();'
+            '</script>',
+            body,
+            name=name,
+        )
+
+
+class ProductIssueAdminForm(forms.ModelForm):
+    class Meta:
+        model = ProductIssue
+        fields = ("products", "date", "status", "note", "doc_ref")
+        widgets = {"products": GroupedProductCheckbox()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        widget = self.fields["products"].widget
+        target = widget.widget if hasattr(widget, "widget") else widget
+        target.groups = group_products(
+            Product.objects.order_by("item_no", "product_name", "product_id")
+        )
+        self.fields["products"].help_text = (
+            "Select every product with this issue. "
+            "All selects the item number before the dash, or one product family such as Pro5."
+        )
+        self.fields["products"].required = True
+        self.fields["note"].help_text = "Brief description of the issue."
+        self.fields["doc_ref"].help_text = (
+            "Choose an instruction already stored on a control panel or power box."
+        )
+        document_url, document_name = instruction_document(self.instance.doc_ref)
+        if document_url:
+            self.fields["doc_ref"].help_text = format_html(
+                'Choose an instruction already stored on a control panel or power box. '
+                '<a href="{}">Open {}</a>',
+                document_url,
+                document_name.split(" · ")[-1],
+            )
+
+
+class RelatedCheckboxFilter(admin.SimpleListFilter):
+    template = "admin/multi_checkbox_filter.html"
+
+    def __init__(self, request, params, model, model_admin):
+        self.request = request
+        super().__init__(request, params, model, model_admin)
+        self.field_path = self.parameter_name
+        self.selected_values = [value for value in request.GET.getlist(self.parameter_name) if value]
+        self.option_values = [value for value, _label in self.lookup_choices]
+
+    def lookups(self, request, model_admin):
+        return [(value, value) for value in self.lookup_values()]
+
+    def lookup_values(self) -> list[str]:
+        return []
+
+    def choices(self, changelist):
+        return ()
+
+    @property
+    def preserved_params(self):
+        return [
+            (key, self.request.GET.getlist(key))
+            for key in self.request.GET
+            if key != self.parameter_name
+        ]
+
+    @property
+    def clear_query_string(self):
+        params = self.request.GET.copy()
+        params.pop(self.parameter_name, None)
+        encoded = params.urlencode()
+        return f"?{encoded}" if encoded else "?"
+
+
+class ProductIssueSupplierFilter(RelatedCheckboxFilter):
+    title = "supplier"
+    parameter_name = "supplier"
+
+    def lookup_values(self) -> list[str]:
+        return list(
+            Product.objects.exclude(supplier="")
+            .order_by("supplier")
+            .values_list("supplier", flat=True)
+            .distinct()
+        )
+
+    def queryset(self, request, queryset):
+        if not self.selected_values:
+            return queryset
+        return queryset.filter(products__supplier__in=self.selected_values).distinct()
+
+
+class ProductIssuePowerBoxFilter(RelatedCheckboxFilter):
+    title = "power box type"
+    parameter_name = "power_box"
+
+    def lookup_values(self) -> list[str]:
+        return list(PowerBox.objects.order_by("name").values_list("name", flat=True).distinct())
+
+    def queryset(self, request, queryset):
+        if not self.selected_values:
+            return queryset
+        return queryset.filter(products__power_box__name__in=self.selected_values).distinct()
+
+
+@admin.register(ProductIssue)
+class ProductIssueAdmin(EditableModelAdmin):
+    form = ProductIssueAdminForm
+    list_display = (
+        "issue_id",
+        "item_numbers",
+        "product_labels",
+        "date",
+        "status",
+        "written_note",
+        "doc_ref",
+    )
+    list_display_links = ("issue_id",)
+    list_editable = ("doc_ref",)
+    list_filter = (ProductIssueSupplierFilter, ProductIssuePowerBoxFilter, "status")
+    search_fields = ("products__item_no", "products__product_name", "note", "doc_ref")
+    ordering = ("-date", "-product_issue_id")
+    readonly_fields = ("created_at", "updated_at")
+
+    class Media:
+        css = {"all": ("sauna_data/product_admin.css",)}
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer("documentation").prefetch_related("products")
+
+    def get_urls(self):
+        custom = [
+            path(
+                "<path:object_id>/file/documentation/",
+                self.admin_site.admin_view(self.serve_documentation),
+                name="sauna_data_productissue_file",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def serve_documentation(self, request, object_id):
+        issue = self.get_object(request, object_id)
+        if issue is None:
+            raise Http404
+        stored = (
+            ProductIssue.objects.filter(pk=issue.pk)
+            .values_list("documentation", "documentation_name")
+            .first()
+        )
+        if stored is None:
+            raise Http404
+        content, filename = stored
+        if not content or not filename:
+            raise Http404
+        response = HttpResponse(bytes(content), content_type="application/pdf")
+        response["Content-Disposition"] = content_disposition_header(False, filename)
+        return response
+
+    def get_fields(self, request, obj=None):
+        fields = ["products", "date", "status", "note", "doc_ref"]
+        if obj is not None:
+            fields.extend(["created_at", "updated_at"])
+        return fields
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "doc_ref":
+            return forms.ChoiceField(
+                choices=instruction_document_choices(),
+                required=False,
+                label="Doc",
+                widget=forms.Select,
+            )
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+    @admin.display(description="issueID", ordering="product_issue_id")
+    def issue_id(self, obj: ProductIssue) -> int:
+        return obj.pk
+
+    @admin.display(description="Note")
+    def written_note(self, obj: ProductIssue) -> str:
+        text = (obj.note or "").strip()
+        if not text:
+            return "—"
+        if len(text) > 80:
+            return f"{text[:80]}…"
+        return text
+
+    @admin.display(description="Item no")
+    def item_numbers(self, obj: ProductIssue) -> str:
+        numbers = sorted({product.item_no for product in obj.products.all() if product.item_no})
+        if not numbers:
+            return "—"
+        if len(numbers) > 4:
+            return f"{', '.join(numbers[:4])} +{len(numbers) - 4}"
+        return ", ".join(numbers)
+
+    @admin.display(description="Products")
+    def product_labels(self, obj: ProductIssue) -> str:
+        names = sorted(product.product_name for product in obj.products.all())
+        if not names:
+            return "—"
+        if len(names) > 4:
+            return f"{', '.join(names[:4])} +{len(names) - 4}"
+        return ", ".join(names)

@@ -1,9 +1,17 @@
+from pathlib import Path
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
 from sauna_data.models import Product, ProductItem
+
+UI_SRC = Path(__file__).resolve().parents[1] / "frontend" / "src"
+
+
+def ui_source(name: str) -> str:
+    return (UI_SRC / name).read_text()
 
 
 class QcDatabaseTests(TestCase):
@@ -218,7 +226,12 @@ class QcDatabaseTests(TestCase):
         response = self.client.get("/products/")
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn(">G</a>", content)
+        catalog = self.client.get("/api/products/").json()
+        supplier_labels = [item["label"] for item in catalog["filters"]["suppliers"]]
+        self.assertIn("G", supplier_labels)
+        self.assertNotIn("Global", supplier_labels)
+        self.assertNotIn("SmartMak", supplier_labels)
+        self.assertNotIn("Royal", supplier_labels)
         self.assertNotIn(">Global<", content)
         self.assertNotIn(">SmartMak<", content)
         self.assertNotIn(">Royal<", content)
@@ -229,10 +242,11 @@ class QcDatabaseTests(TestCase):
             wattage=1000,
             supplier="SmartMak",
         )
-        filtered = self.client.get("/products/?supplier=smartmak")
-        self.assertContains(filtered, "SmartMak unit")
-        self.assertContains(filtered, ">S</a>")
-        self.assertNotContains(filtered, self.product.product_name)
+        filtered = self.client.get("/api/products/?supplier=smartmak").json()
+        filtered_names = [row["name"] for row in filtered["products"]]
+        self.assertIn("SmartMak unit", filtered_names)
+        self.assertIn("S", [row["supplier_label"] for row in filtered["products"]])
+        self.assertNotIn(self.product.product_name, filtered_names)
         self.assertIn(">Products</a>", content)
         self.assertIn(">Power boxes</a>", content)
         self.assertIn(">Control panels</a>", content)
@@ -252,37 +266,43 @@ class QcDatabaseTests(TestCase):
         box.save(update_fields=["picture", "picture_name"])
         self.product.power_box = box
         self.product.save(update_fields=["power_box"])
-        with_file = self.client.get("/power-boxes/")
-        self.assertContains(with_file, "picture_1.png")
-        self.assertContains(with_file, f"/products/files/power-box/{box.pk}/picture/")
-        self.assertContains(with_file, ">firmware info<")
-        self.assertNotContains(with_file, "Firmware update devices")
-        self.assertContains(with_file, 'target="_blank"')
-        self.assertContains(with_file, "col-box-desktop")
-        self.assertContains(with_file, "(None)")
+        with_file = self.client.get("/api/power-boxes/")
+        self.assertEqual(with_file.status_code, 200)
+        power_boxes = with_file.json()["power_boxes"]
+        li_box = next(row for row in power_boxes if row["name"] == "CS-Li")
+        self.assertEqual(li_box["pictures"][0]["name"], "picture_1.png")
+        self.assertEqual(li_box["pictures"][0]["url"], f"/products/files/power-box/{box.pk}/picture/")
+        self.assertIn("firmware_info", li_box)
+        self.assertIn("(None)", [row["firmware_display"] for row in power_boxes])
+        self.assertNotIn("Firmware update devices", with_file.content.decode())
+        power_ui = ui_source("PowerBoxesPage.jsx")
+        self.assertIn('target="_blank"', power_ui)
+        self.assertIn(">Applicable products<", power_ui)
+        self.assertIn("aria-label={file.name}", power_ui)
+        self.assertIn(
+            {"name": "CS.6-EVR1", "url": f"/products/{self.product.product_id}/"},
+            li_box["products"],
+        )
         from sauna_data.models import ControlPanel
 
         panel = ControlPanel.objects.get(name="CP-Li")
         panel.picture_name = "picture.png"
         panel.documentation_1_name = "150F re-calibration.pdf"
         panel.save(update_fields=["picture_name", "documentation_1_name"])
-        panels_page = self.client.get("/control-panels/")
-        panels_section = panels_page.content.decode()
-        self.assertIn(">Control panels<", panels_section)
-        self.assertIn(">Firmware instruction<", panels_section)
-        self.assertIn(">Control Panel instruction<", panels_section)
-        self.assertIn(">Applicable products<", with_file.content.decode())
-        self.assertIn(
-            f'/products/{self.product.product_id}/">CS.6-EVR1</a>',
-            with_file.content.decode(),
-        )
-        self.assertIn(">Firmware device<", panels_section)
-        self.assertNotIn(">Picture<", panels_section)
-        self.assertNotIn("Firmware update instruction", panels_section)
-        self.assertIn(f'/products/files/control-panel/{panel.pk}/picture/" target="_blank"', panels_section)
-        self.assertIn(">CP-Li</a>", panels_section)
-        self.assertIn('target="_blank" rel="noopener noreferrer">150F re-calibration.pdf</a>', panels_section)
-        self.assertIn("(None)", panels_section)
+        panels_page = self.client.get("/api/control-panels/")
+        panels = panels_page.json()["control_panels"]
+        cp_li = next(row for row in panels if row["name"] == "CP-Li")
+        panel_ui = ui_source("ControlPanelsPage.jsx")
+        self.assertIn('title="Control panels"', panel_ui)
+        self.assertIn(">Firmware instruction<", panel_ui)
+        self.assertIn(">CP instruction<", panel_ui)
+        self.assertIn(">Firmware device<", panel_ui)
+        self.assertNotIn(">Picture<", panel_ui)
+        self.assertNotIn("Firmware update instruction", panel_ui)
+        self.assertIn('target="_blank"', panel_ui)
+        self.assertEqual(cp_li["picture"][0]["url"], f"/products/files/control-panel/{panel.pk}/picture/")
+        self.assertEqual(cp_li["firmware_instruction_name"], "150F re-calibration.pdf")
+        self.assertIn("(None)", [row["firmware_device_display"] for row in panels] + [row["panel_instruction_name"] for row in panels])
         downloaded = self.client.get(f"/products/files/power-box/{box.pk}/picture/")
         self.assertEqual(downloaded.status_code, 200)
         self.assertEqual(downloaded.content, b"png-bytes")
@@ -381,52 +401,56 @@ class QcDatabaseTests(TestCase):
             supplier="Global",
             power_box=luis,
         )
-        page = self.client.get("/products/")
-        content = page.content.decode()
-        self.assertLess(content.index(">G</a>"), content.index(">R</a>"))
-        self.assertLess(content.index(">R</a>"), content.index(">S</a>"))
-        self.assertLess(content.index(">S</a>"), content.index(">Luis</a>"))
-        self.assertLess(content.index(">Luis</a>"), content.index(">Wang</a>"))
-        self.assertLess(content.index(">Wang</a>"), content.index(">Li</a>"))
-        self.assertLess(content.index(">Li</a>"), content.index(">Pro5</a>"))
-        self.assertLess(content.index(">Pro5</a>"), content.index(">CS</a>"))
-        self.assertLess(content.index(">CS</a>"), content.index(">RedFit Room</a>"))
-        self.assertNotIn(">EVR</a>", content)
-        wang_page = self.client.get("/products/?box=wang")
-        self.assertContains(wang_page, "Pro5.1")
-        self.assertNotContains(wang_page, "CS.2 (Luis)")
-        self.assertNotContains(wang_page, "Redfit Room")
-        li_page = self.client.get("/products/?box=li")
-        self.assertContains(li_page, "Redfit Room")
-        self.assertNotContains(li_page, "CS.2 (Luis)")
-        self.assertNotContains(li_page, "Redfit iGym (Luis)")
-        pro5 = self.client.get("/products/?family=pro5")
-        self.assertContains(pro5, "Pro5.1")
-        self.assertNotContains(pro5, "PRO 10.1")
-        self.assertNotContains(pro5, "CS.2 (Luis)")
-        cs = self.client.get("/products/?family=cs")
-        self.assertContains(cs, "CS.2 (Luis)")
-        self.assertContains(cs, self.product.product_name)
-        self.assertNotContains(cs, "Pro5.1")
-        self.assertNotContains(cs, "Redfit Room")
-        room = self.client.get("/products/?family=redfit")
-        self.assertContains(room, "Redfit Room")
-        self.assertNotContains(room, "Redfit iGym (Luis)")
+        page = self.client.get("/api/products/")
+        filters = page.json()["filters"]
+        labels = [item["label"] for item in filters["suppliers"] + filters["boxes"] + filters["families"]]
+        self.assertEqual(
+            labels,
+            ["G", "R", "S", "Luis", "Wang", "Li", "Pro5", "CS", "RedFit Room"],
+        )
+        self.assertNotIn("EVR", labels)
+
+        def names(response):
+            return [row["name"] for row in response.json()["products"]]
+
+        wang_page = self.client.get("/api/products/?box=wang")
+        self.assertIn("Pro5.1", names(wang_page))
+        self.assertNotIn("CS.2 (Luis)", names(wang_page))
+        self.assertNotIn("Redfit Room", names(wang_page))
+        li_page = self.client.get("/api/products/?box=li")
+        self.assertIn("Redfit Room", names(li_page))
+        self.assertNotIn("CS.2 (Luis)", names(li_page))
+        self.assertNotIn("Redfit iGym (Luis)", names(li_page))
+        pro5 = self.client.get("/api/products/?family=pro5")
+        self.assertIn("Pro5.1", names(pro5))
+        self.assertNotIn("PRO 10.1", names(pro5))
+        self.assertNotIn("CS.2 (Luis)", names(pro5))
+        cs = self.client.get("/api/products/?family=cs")
+        self.assertIn("CS.2 (Luis)", names(cs))
+        self.assertIn(self.product.product_name, names(cs))
+        self.assertNotIn("Pro5.1", names(cs))
+        self.assertNotIn("Redfit Room", names(cs))
+        room = self.client.get("/api/products/?family=redfit")
+        self.assertIn("Redfit Room", names(room))
+        self.assertNotIn("Redfit iGym (Luis)", names(room))
 
     def test_customer_service_is_view_only(self) -> None:
         listing = self.client.get("/customer-service/")
         self.assertEqual(listing.status_code, 200)
-        self.assertContains(listing, self.unit.serial_no)
-        self.assertContains(listing, "McCoy")
         self.assertNotContains(listing, "upload_slot")
+        records = self.client.get("/api/units/").json()["units"]
+        self.assertIn(self.unit.serial_no, [row["serial_no"] for row in records])
+        self.assertIn("McCoy", [row["qc_tester_name"] for row in records])
         detail_url = f"/customer-service/{self.unit.product_item_id}/"
         detail = self.client.get(detail_url)
         self.assertEqual(detail.status_code, 200)
         html = detail.content.decode()
         self.assertIn(self.unit.serial_no, html)
-        self.assertIn("McCoy", html)
+        record = self.client.get(f"/api/units/{self.unit.product_item_id}/").json()
+        self.assertEqual(record["qc_tester_name"], "McCoy")
         self.assertNotIn("upload_slot", html)
         self.assertNotIn("save_status", html)
+        self.assertNotIn("<form", html)
         note = self.unit.note
         response = self.client.post(detail_url, {"note": "changed by service", "action": "save_status"})
         self.assertEqual(response.status_code, 405)
@@ -507,23 +531,27 @@ class QcDatabaseTests(TestCase):
         self.assertEqual(PowerBox.objects.get(name="CS-Luis").control_panel.name, "CP-Luis")
         self.assertIsNone(PowerBox.objects.get(name="SmMak_v1.0").control_panel)
         listing = self.client.get("/products/")
-        self.assertContains(listing, ">Product ID</a>")
-        self.assertContains(listing, ">Sup</a>")
-        self.assertContains(listing, ">Power box</a>")
-        self.assertContains(listing, ">Control Panel</th>")
+        products_ui = ui_source("ProductsPage.jsx")
+        self.assertIn('label="Product ID"', products_ui)
+        self.assertIn('label="Sup"', products_ui)
+        self.assertIn('label="Power box"', products_ui)
+        self.assertIn(">Control Panel</th>", products_ui)
         self.assertNotContains(listing, "Powerbox picture")
         self.assertNotContains(listing, "Control panel pictures")
         self.assertNotContains(listing, "CP_firmware devices")
         self.assertNotContains(listing, ">Power box firmware devices</th>")
         self.assertNotContains(listing, "Power box type")
-        self.assertContains(listing, "CS-Li")
-        self.assertNotContains(listing, "CS-Li, RFR-Wang")
-        detail = self.client.get(f"/products/{self.product.pk}/")
-        self.assertContains(detail, "Power box type")
-        self.assertContains(detail, "CS-Li")
-        self.assertContains(detail, "Control panel type")
-        self.assertContains(detail, "CP-Li")
-        self.assertNotContains(detail, "CP-Li, CP-RFR")
+        catalog = self.client.get("/api/products/").json()
+        row = next(item for item in catalog["products"] if item["id"] == self.product.product_id)
+        self.assertEqual(row["power_box"]["name"], "CS-Li")
+        self.assertNotIn(",", row["power_box"]["name"])
+        detail = self.client.get(f"/api/products/{self.product.pk}/").json()
+        detail_ui = ui_source("ProductDetailPage.jsx")
+        self.assertIn(">Power box type<", detail_ui)
+        self.assertEqual(detail["power_box"], "CS-Li")
+        self.assertIn(">Control panel type<", detail_ui)
+        self.assertEqual(detail["control_panel"], "CP-Li")
+        self.assertNotIn(",", detail["control_panel"])
 
     def test_smmak_products_use_one_power_box(self) -> None:
         from sauna_data.models import PowerBox
@@ -572,20 +600,26 @@ class QcDatabaseTests(TestCase):
         info_for = {row["name"]: row["firmware_info"] for row in catalog["power_boxes"]}
         self.assertEqual(info_for["Luis_v1.0"], "ACD 2")
         self.assertEqual(info_for["Luis_v1.1"], "ACD 3")
-        page = self.client.get("/power-boxes/")
-        rows = page.content.decode().split("<tr>")
-        v10_row = next(row for row in rows if "Luis_v1.0" in row and "Luis_v1.1" not in row)
-        v11_row = next(row for row in rows if "Luis_v1.1" in row)
-        self.assertIn("ACD 2", v10_row)
-        self.assertNotIn("ACD 3", v10_row)
-        self.assertIn('aria-label="ACD - instruction document.pdf"', v10_row)
-        self.assertIn('aria-label="ACD - instruction video.mp4"', v10_row)
-        self.assertIn('target="_blank"', v10_row)
-        self.assertIn("M14 2H6", v10_row)
-        self.assertIn("M17 10.5V7", v10_row)
-        self.assertNotIn(">ACD - instruction document.pdf<", v10_row)
-        self.assertIn("ACD 3", v11_row)
-        self.assertNotIn("ACD 2", v11_row)
+        page = self.client.get("/api/power-boxes/")
+        rows = {row["name"]: row for row in page.json()["power_boxes"]}
+        v10_row = rows["Luis_v1.0"]
+        v11_row = rows["Luis_v1.1"]
+        self.assertEqual(v10_row["firmware_info"], "ACD 2")
+        self.assertNotIn("ACD 3", v10_row["firmware_info"])
+        firmware_names = [item["name"] for item in v10_row["firmware_files"]]
+        self.assertEqual(
+            firmware_names,
+            ["ACD - instruction document.pdf", "ACD - instruction video.mp4"],
+        )
+        self.assertFalse(v10_row["firmware_files"][0]["video"])
+        self.assertTrue(v10_row["firmware_files"][1]["video"])
+        power_ui = ui_source("PowerBoxesPage.jsx")
+        self.assertIn("aria-label={file.name}", power_ui)
+        self.assertIn('target="_blank"', power_ui)
+        self.assertIn("file.video ? <VideoIcon /> : <DocIcon />", power_ui)
+        self.assertEqual(v11_row["firmware_info"], "ACD 3")
+        self.assertNotIn("ACD 2", v11_row["firmware_info"])
+        self.assertEqual(v11_row["firmware_files"], [])
 
     def test_firmware_devices_are_split_by_parent(self) -> None:
         from django.contrib.auth import get_user_model
@@ -635,15 +669,16 @@ class QcDatabaseTests(TestCase):
             supplier="Global",
         )
         self.assertEqual(low_voltage.plug_type, Product.PlugType.NEMA_5_20P)
-        listing = self.client.get("/products/")
-        self.assertContains(listing, ">Product name</a>")
+        listing = self.client.get("/api/products/")
+        self.assertIn('label="Product name"', ui_source("ProductsPage.jsx"))
         self.assertNotContains(listing, "Plug type")
         self.assertNotContains(listing, "Voltage")
         self.assertNotContains(listing, "Wattage")
         self.assertNotContains(listing, "Watt on label")
-        detail = self.client.get(f"/products/{self.product.pk}/")
-        self.assertContains(detail, "Watt on label")
+        detail = self.client.get(f"/api/products/{self.product.pk}/")
+        self.assertIn(">Watt on label<", ui_source("ProductDetailPage.jsx"))
         self.assertContains(detail, "L6-20P")
+        self.assertIsNone(detail.json()["watt_on_label"])
         get_user_model().objects.create_superuser("plug-admin", "plug@example.com", "pass")
         self.client.login(username="plug-admin", password="pass")
         admin_page = self.client.get(f"/admin/sauna_data/product/{self.product.pk}/change/")
@@ -895,17 +930,16 @@ class QcDatabaseTests(TestCase):
         self.assertNotContains(unit_page, "Control panel picture")
         self.assertNotContains(unit_page, "Power box picture")
         page = self.client.get(f"/products/{self.product.pk}/")
+        detail_ui = ui_source("ProductDetailPage.jsx")
         self.assertNotContains(page, "Order no")
         self.assertNotContains(page, "QC_Status")
-        self.assertContains(page, "Firmware update instruction")
-        self.assertEqual(page.content.decode().count("Firmware update instruction"), 1)
-        self.assertContains(page, "Control panel instruction")
-        self.assertEqual(page.content.decode().count("Control panel instruction"), 1)
-        self.assertNotContains(page, "Control panel info")
-        self.assertNotContains(page, "Power box info")
-        self.assertContains(page, "Control panel picture")
-        self.assertContains(page, "Power box picture")
-        self.assertContains(page, "None")
+        self.assertEqual(detail_ui.count("Firmware instruction"), 1)
+        self.assertEqual(detail_ui.count("Control panel instruction"), 1)
+        self.assertNotIn("Control panel info", detail_ui)
+        self.assertNotIn("Power box info", detail_ui)
+        self.assertIn("Control panel picture", detail_ui)
+        self.assertIn("Power box picture", detail_ui)
+        self.assertIn(">None<", detail_ui)
         self.assertNotContains(page, "Li-Device")
         box = PowerBox.objects.get(name="CS-Li")
         panel = box.control_panel
@@ -939,29 +973,28 @@ class QcDatabaseTests(TestCase):
         )
         self.product.power_box = box
         self.product.save(update_fields=["power_box"])
-        linked = self.client.get(f"/products/{self.product.pk}/")
+        linked = self.client.get(f"/api/products/{self.product.pk}/")
         unit_linked = self.client.get(f"/units/{self.unit.pk}/")
         self.assertNotContains(unit_linked, "panel-guide.pdf")
         self.assertNotContains(unit_linked, "panel-update.mp4")
         self.assertNotContains(unit_linked, "box-firmware.pdf")
-        self.assertContains(linked, "Firmware update instruction")
-        self.assertEqual(linked.content.decode().count("Firmware update instruction"), 1)
-        self.assertNotContains(linked, "Control panel firmware update")
-        self.assertNotContains(linked, "Power box firmware update instruction")
-        self.assertNotContains(linked, "Firmware update device")
-        self.assertNotContains(linked, "Li-Device")
-        self.assertNotContains(linked, "ACD2")
         linked_html = linked.content.decode()
-        self.assertContains(linked, "Control panel instruction")
-        self.assertLess(linked_html.index("box-firmware.pdf"), linked_html.index("panel-update.mp4"))
-        self.assertLess(linked_html.index("panel-update.mp4"), linked_html.index("panel-guide.pdf"))
-        self.assertContains(linked, 'class="qc-support-file-list"')
-        self.assertContains(linked, "panel-guide.pdf")
-        self.assertContains(linked, "panel-update.mp4")
-        self.assertContains(linked, "box-firmware.pdf")
-        self.assertContains(linked, "picture_1.png")
-        self.assertContains(linked, 'class="qc-support-photo qc-support-photo-wide"')
-        self.assertContains(linked, f"/products/{self.product.pk}/support/control-panel/{panel.pk}/picture/")
+        self.assertNotIn("Control panel firmware update", linked_html)
+        self.assertNotIn("Power box firmware update instruction", linked_html)
+        self.assertNotIn("Firmware update device", linked_html)
+        self.assertNotIn("Li-Device", linked_html)
+        self.assertNotIn("ACD2", linked_html)
+        payload = linked.json()
+        names = [item["name"] for item in payload["firmware_updates"]]
+        names += [item["name"] for item in payload["panel_instructions"]]
+        self.assertEqual(names, ["box-firmware.pdf", "panel-update.mp4", "panel-guide.pdf"])
+        self.assertIn('className="qc-support-file-list"', detail_ui)
+        self.assertIn("picture_1.png", linked_html)
+        self.assertIn("qc-support-photo-wide", detail_ui)
+        self.assertIn(
+            f"/products/{self.product.pk}/support/control-panel/{panel.pk}/picture/",
+            linked_html,
+        )
         downloaded = self.client.get(
             f"/products/{self.product.pk}/support/control-panel/{panel.pk}/documentation/"
         )
@@ -982,8 +1015,215 @@ class QcDatabaseTests(TestCase):
         luis_box = PowerBox.objects.get(name="CS-Luis")
         self.product.power_box = luis_box
         self.product.save(update_fields=["power_box"])
-        luis_page = self.client.get(f"/products/{self.product.pk}/")
+        luis_page = self.client.get(f"/api/products/{self.product.pk}/")
         self.assertNotContains(luis_page, "panel-update.mp4")
         self.assertNotContains(luis_page, "panel-guide.pdf")
         self.assertNotContains(luis_page, "Luis-Devices(ACD2, ACD3)")
         self.assertNotContains(luis_page, "Li-Device")
+
+    def test_open_issues_exclude_solved_and_link_to_the_section(self) -> None:
+        from datetime import date
+
+        from sauna_data.models import ProductIssue
+
+        ProductIssue.objects.create(
+            date=date(2026, 10, 10),
+            status=ProductIssue.Status.SOLVED,
+        ).products.add(self.product)
+        ProductIssue.objects.create(
+            date=date(2026, 10, 12),
+            status=ProductIssue.Status.IN_PROGRESS,
+        ).products.add(self.product)
+        ProductIssue.objects.create(
+            date=date(2026, 10, 14),
+            status=ProductIssue.Status.NOT_STARTED,
+        ).products.add(self.product)
+        listing = self.client.get("/api/products/").json()
+        row = next(item for item in listing["products"] if item["id"] == self.product.pk)
+        self.assertEqual(row["known_issues"], 3)
+        detail = self.client.get(f"/api/products/{self.product.pk}/").json()
+        self.assertEqual(detail["known_issue_count"], 3)
+        self.assertEqual(
+            [issue["status"] for issue in detail["issues"]],
+            ["NOT_STARTED", "IN_PROGRESS", "SOLVED"],
+        )
+        blocked = self.client.post(
+            f"/api/products/{self.product.pk}/issues/",
+            {"date": "2026-10-14", "status": "SOLVED"},
+        )
+        self.assertEqual(blocked.status_code, 404)
+        self.assertEqual(self.client.get(f"/api/products/{self.product.pk}/").json()["known_issue_count"], 3)
+        products_ui = ui_source("ProductsPage.jsx")
+        self.assertIn('label="Known Issues"', products_ui)
+        self.assertIn("#product-issues", products_ui)
+        detail_ui = ui_source("ProductDetailPage.jsx")
+        self.assertIn('title="SPEC"', detail_ui)
+        self.assertIn('title="KNOWN ISSUES"', detail_ui)
+        self.assertNotIn("Add issue", detail_ui)
+        self.assertNotIn("ID {product.id}", detail_ui)
+
+    def test_issue_admin_groups_products_by_family_and_item_prefix(self) -> None:
+        from types import SimpleNamespace
+
+        from sauna_data.product_issues import group_products
+
+        groups = group_products(
+            [
+                SimpleNamespace(pk=1, item_no="310203-01", product_name="Pro5.1"),
+                SimpleNamespace(pk=2, item_no="310203-06", product_name="Pro5.6"),
+                SimpleNamespace(pk=3, item_no="310211-02", product_name="CS.2 (Luis)"),
+            ]
+        )
+        self.assertEqual(groups[0]["prefix"], "310203")
+        self.assertEqual(groups[0]["families"][0]["name"], "Pro5")
+        self.assertEqual([row["id"] for row in groups[0]["families"][0]["products"]], [1, 2])
+        Product.objects.create(
+            item_no="310203-02",
+            product_name="Pro5.2",
+            voltage=110,
+            wattage=1000,
+            supplier="Global",
+        )
+        get_user_model().objects.create_superuser("issue-admin", "issue@example.com", "pass")
+        self.client.login(username="issue-admin", password="pass")
+        page = self.client.get("/admin/sauna_data/productissue/add/")
+        html = page.content.decode()
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn('name="product"', html)
+        self.assertIn('name="products"', html)
+        self.assertIn("All Pro5 · 310203", html)
+        self.assertIn("Pro5.2", html)
+
+    def test_issue_admin_filters_supplier_power_box_and_shows_item_numbers(self) -> None:
+        from datetime import date
+
+        from sauna_data.models import PowerBox, ProductIssue
+
+        global_box, _created = PowerBox.objects.get_or_create(name="Luis_v1.0")
+        royal_box, _created = PowerBox.objects.get_or_create(name="Royal_v1.0")
+        global_product = Product.objects.create(
+            item_no="310203-01",
+            product_name="Pro5.1",
+            voltage=110,
+            wattage=1000,
+            supplier="Global",
+            power_box=global_box,
+        )
+        royal_product = Product.objects.create(
+            item_no="310303-02",
+            product_name="WellPRO 18.2",
+            voltage=220,
+            wattage=1000,
+            supplier="Royal",
+            power_box=royal_box,
+        )
+        global_issue = ProductIssue.objects.create(
+            date=date(2026, 10, 14),
+            status=ProductIssue.Status.NOT_STARTED,
+            note="Global latch",
+        )
+        global_issue.products.add(global_product)
+        royal_issue = ProductIssue.objects.create(
+            date=date(2026, 10, 13),
+            status=ProductIssue.Status.NOT_STARTED,
+            note="Royal hinge",
+        )
+        royal_issue.products.add(royal_product)
+        get_user_model().objects.create_superuser("issue-filter", "filter@example.com", "pass")
+        self.client.login(username="issue-filter", password="pass")
+        listing = self.client.get("/admin/sauna_data/productissue/")
+        self.assertContains(listing, "By supplier")
+        self.assertContains(listing, "By power box type")
+        self.assertContains(listing, 'name="supplier"')
+        self.assertContains(listing, 'name="power_box"')
+        self.assertContains(listing, "310203-01")
+        self.assertContains(listing, "310303-02")
+        filtered = self.client.get("/admin/sauna_data/productissue/?supplier=Global&power_box=Luis_v1.0")
+        rows = filtered.content.decode().split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+        self.assertIn("Global latch", rows)
+        self.assertIn("310203-01", rows)
+        self.assertNotIn("Royal hinge", rows)
+
+    def test_issue_note_and_pdf_documentation(self) -> None:
+        from datetime import date
+
+        from sauna_data.models import ProductIssue
+
+        issue = ProductIssue.objects.create(
+            date=date(2026, 10, 14),
+            status=ProductIssue.Status.NOT_STARTED,
+            note="Door will not latch",
+        )
+        issue.products.add(self.product)
+        detail = self.client.get(f"/api/products/{self.product.pk}/").json()
+        self.assertEqual(detail["issues"][0]["note"], "Door will not latch")
+        self.assertIn(">Note<", ui_source("ProductDetailPage.jsx"))
+        self.assertNotIn("Add issue", ui_source("ProductDetailPage.jsx"))
+        blocked = self.client.post(
+            f"/api/products/{self.product.pk}/issues/{issue.pk}/",
+            {"date": "2026-10-14", "status": "SOLVED", "note": "Changed from the product page"},
+        )
+        self.assertEqual(blocked.status_code, 404)
+        issue.refresh_from_db()
+        self.assertEqual(issue.note, "Door will not latch")
+
+        get_user_model().objects.create_superuser("issue-docs", "docs@example.com", "pass")
+        self.client.login(username="issue-docs", password="pass")
+        from sauna_data.models import ControlPanel, PowerBox
+
+        panel = ControlPanel.objects.create(name="CP-issue-doc")
+        panel.documentation_1 = b"%PDF-panel"
+        panel.documentation_1_name = "panel-guide.pdf"
+        panel.documentation_2 = b"%PDF-cp"
+        panel.documentation_2_name = "cp-guide.pdf"
+        panel.save()
+        box = PowerBox.objects.create(name="Box-issue-doc")
+        box.firmware_document = b"%PDF-box"
+        box.firmware_document_name = "box-firmware.pdf"
+        box.save()
+        panel_ref = f"control-panel:{panel.pk}:documentation"
+        box_ref = f"power-box:{box.pk}:firmware-document"
+        change = f"/admin/sauna_data/productissue/{issue.pk}/change/"
+        page = self.client.get(change)
+        self.assertContains(page, 'name="doc_ref"')
+        self.assertContains(page, "panel-guide.pdf")
+        self.assertContains(page, "cp-guide.pdf")
+        self.assertContains(page, "box-firmware.pdf")
+        self.assertNotContains(page, 'name="documentation_upload"')
+        saved = self.client.post(
+            change,
+            {
+                "products": [str(self.product.pk)],
+                "date": "2026-10-14",
+                "status": "IN_PROGRESS",
+                "note": "Latch sticks on the left side",
+                "doc_ref": panel_ref,
+            },
+        )
+        self.assertEqual(saved.status_code, 302)
+        issue.refresh_from_db()
+        self.assertEqual(issue.note, "Latch sticks on the left side")
+        self.assertEqual(issue.doc_ref, panel_ref)
+        detail = self.client.get(f"/api/products/{self.product.pk}/").json()
+        self.assertEqual(detail["issues"][0]["documentation_name"], "CP-issue-doc · panel-guide.pdf")
+        downloaded = self.client.get(detail["issues"][0]["documentation_url"])
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(downloaded.content, b"%PDF-panel")
+        listing = self.client.get("/admin/sauna_data/productissue/")
+        self.assertContains(listing, "IssueID")
+        self.assertContains(listing, ">Doc<")
+        self.assertContains(listing, box_ref)
+        kept = self.client.post(
+            change,
+            {
+                "products": [str(self.product.pk)],
+                "date": "2026-10-14",
+                "status": "IN_PROGRESS",
+                "note": "Still sticks",
+                "doc_ref": panel_ref,
+            },
+        )
+        self.assertEqual(kept.status_code, 302)
+        issue.refresh_from_db()
+        self.assertEqual(issue.note, "Still sticks")
+        self.assertEqual(issue.doc_ref, panel_ref)
