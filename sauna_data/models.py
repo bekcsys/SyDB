@@ -30,6 +30,8 @@ class Product(models.Model):
         default="",
     )
     watt_on_label = models.PositiveIntegerField(null=True, blank=True)
+    picture = models.BinaryField(null=True, blank=True, editable=False)
+    picture_name = models.CharField(max_length=255, blank=True, default="")
     power_box = models.ForeignKey(
         "PowerBox",
         on_delete=models.PROTECT,
@@ -252,6 +254,8 @@ class ProductIssue(models.Model):
     )
     note = models.TextField(blank=True, default="")
     doc_ref = models.CharField(max_length=80, blank=True, default="", verbose_name="Doc")
+    support_doc = models.BinaryField(null=True, blank=True, editable=False)
+    support_doc_name = models.CharField(max_length=255, blank=True, default="")
     documentation = models.BinaryField(null=True, blank=True, editable=False)
     documentation_name = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

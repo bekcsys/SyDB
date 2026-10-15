@@ -2,7 +2,7 @@
 
 Staff edit catalog and QC records at http://localhost:8000/admin/. From another computer, use `http://<this-machine-ip>:8000/admin/` (`make urls`).
 
-The public site at http://localhost:8000/ does not ask for a login. Admin does.
+SaunaKB at http://localhost:8000/ asks for its own sign-in (`SAUNAKB_USERNAME` and `SAUNAKB_PASSWORD` in `.env`). That account can view the site and cannot open Admin. Admin keeps the superuser credentials below.
 
 ## Login
 

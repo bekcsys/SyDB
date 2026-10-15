@@ -1,5 +1,5 @@
 from django.db import IntegrityError, transaction
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django.db.utils import DataError
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -92,7 +92,7 @@ def _issue_queryset(product: Product):
         output_field=IntegerField(),
     )
     return (
-        product.issues.defer("documentation")
+        product.issues.defer("documentation", "support_doc")
         .annotate(solved_last=solved_last)
         .order_by("solved_last", "-date", "-product_issue_id")
     )
@@ -103,6 +103,9 @@ def _issue_row(issue: ProductIssue, product_id: int) -> dict:
     if not document_url and issue.documentation_name:
         document_url = reverse("product_issue_file", args=[product_id, issue.product_issue_id])
         document_name = issue.documentation_name
+    support_url = ""
+    if issue.support_doc_name:
+        support_url = reverse("product_issue_support_file", args=[product_id, issue.product_issue_id])
     return {
         "id": issue.product_issue_id,
         "date": issue.date.isoformat(),
@@ -111,6 +114,8 @@ def _issue_row(issue: ProductIssue, product_id: int) -> dict:
         "note": issue.note,
         "documentation_name": document_name,
         "documentation_url": document_url,
+        "support_doc_name": issue.support_doc_name,
+        "support_doc_url": support_url,
     }
 
 
@@ -153,7 +158,7 @@ def _panel_rows(product: Product) -> list[dict]:
 @require_GET
 def product_detail_api(request: HttpRequest, product_id: int) -> JsonResponse:
     product = get_object_or_404(
-        Product.objects.select_related("power_box", "power_box__control_panel"),
+        Product.objects.select_related("power_box", "power_box__control_panel").defer("picture"),
         pk=product_id,
     )
     support = qc_support_for_product(product)
@@ -177,6 +182,9 @@ def product_detail_api(request: HttpRequest, product_id: int) -> JsonResponse:
             "unit_count": len(units),
             "power_box": product.power_box_type_label(),
             "control_panel": product.control_panel_type_label(),
+            "picture_url": (
+                reverse("product_picture", args=[product.pk]) if product.picture_name else ""
+            ),
             "firmware_updates": support["firmware_updates"],
             "panel_instructions": support["panel_instructions"],
             "panels": support["panels"],
@@ -257,6 +265,30 @@ def _unit_row(unit: ProductItem) -> dict:
     }
 
 
+def _catalog_issues() -> list[dict]:
+    issues = ProductIssue.objects.defer("documentation", "support_doc").prefetch_related(
+        Prefetch(
+            "products",
+            queryset=Product.objects.only("product_id", "product_name", "item_no").order_by(
+                "product_name", "item_no"
+            ),
+        )
+    )
+    rows = []
+    for issue in issues:
+        products = list(issue.products.all())
+        product_id = products[0].pk if products else 0
+        row = _issue_row(issue, product_id)
+        row["products"] = [
+            {"id": product.pk, "name": product.product_name, "item_no": product.item_no}
+            for product in products
+        ]
+        row["impacted_products"] = len(products)
+        rows.append(row)
+    rows.sort(key=lambda row: (row["impacted_products"], row["date"], row["id"]), reverse=True)
+    return rows
+
+
 @require_GET
 def units_api(request: HttpRequest) -> JsonResponse:
     units, meta = unit_list_query(request)
@@ -268,8 +300,15 @@ def units_api(request: HttpRequest) -> JsonResponse:
             "pick": meta["pick"],
             "filters": _pairs(meta["filters"]),
             "units": [_unit_row(unit) for unit in units],
+            "issues": _catalog_issues(),
         }
     )
+
+
+def _product_issues(unit: ProductItem) -> list[dict]:
+    if not unit.product_id:
+        return []
+    return [_issue_row(issue, unit.product_id) for issue in _issue_queryset(unit.product)]
 
 
 def _unit_editor(unit: ProductItem) -> dict:
@@ -285,6 +324,7 @@ def _unit_editor(unit: ProductItem) -> dict:
         "statuses": [
             {"value": value, "label": label} for value, label in ProductItem.Status.choices
         ],
+        "issues": _product_issues(unit),
     }
 
 
@@ -301,7 +341,8 @@ def unit_detail_api(request: HttpRequest, unit_id: int) -> JsonResponse:
         except (IntegrityError, DataError, ValueError):
             return _json({"ok": False, "errors": [UNIT_SAVE_FAILED]}, 400)
         unit.refresh_from_db()
-        return _json({"ok": True, "unit": _unit_row(unit)})
+        unit = ProductItem.objects.select_related("product").get(pk=unit.pk)
+        return _json({"ok": True, "unit": _unit_row(unit), "issues": _product_issues(unit)})
     return _json(_unit_editor(unit))
 
 

@@ -577,8 +577,60 @@ class MultiCheckboxFilter(admin.FieldListFilter):
         return f"?{encoded}" if encoded else "?"
 
 
+class ProductAdminForm(forms.ModelForm):
+    picture_upload = forms.FileField(
+        required=False,
+        label="Picture",
+        widget=forms.FileInput(attrs={"accept": ".jpg,.jpeg,.png,.webp,.gif"}),
+    )
+
+    class Meta:
+        model = Product
+        fields = (
+            "item_no",
+            "product_name",
+            "voltage",
+            "plug_type",
+            "wattage",
+            "watt_on_label",
+            "supplier",
+            "number_of_cords",
+            "power_box",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        product = self.instance
+        if product.pk and product.picture_name:
+            url = reverse("admin:sauna_data_product_picture", args=[product.pk])
+            self.fields["picture_upload"].help_text = _file_help(url, product.picture_name, "picture_upload")
+
+    def clean_picture_upload(self):
+        return _clean_limited_upload(
+            self.cleaned_data.get("picture_upload"),
+            _PICTURE_SUFFIXES,
+            "Picture must be a JPG, PNG, WEBP, or GIF file.",
+        )
+
+    def save(self, commit=True):
+        product = super().save(commit=False)
+        if _clear_requested(self, "picture_upload"):
+            product.picture = None
+            product.picture_name = ""
+        else:
+            uploaded = self.cleaned_data.get("picture_upload")
+            if uploaded:
+                suffix = Path(uploaded.name).suffix.lower()
+                product.picture = uploaded.read()
+                product.picture_name = f"picture{suffix}"
+        if commit:
+            product.save()
+        return product
+
+
 @admin.register(Product)
 class ProductAdmin(EditableModelAdmin):
+    form = ProductAdminForm
     list_display = (
         "product_row_id",
         "item_no",
@@ -614,6 +666,7 @@ class ProductAdmin(EditableModelAdmin):
             .get_queryset(request)
             .select_related("power_box__control_panel")
             .defer(
+                "picture",
                 "power_box__picture",
                 "power_box__firmware_document",
                 "power_box__firmware_video",
@@ -622,6 +675,33 @@ class ProductAdmin(EditableModelAdmin):
                 "power_box__control_panel__documentation_2",
             )
         )
+
+    def get_urls(self):
+        custom = [
+            path(
+                "<path:object_id>/file/picture/",
+                self.admin_site.admin_view(self.serve_picture),
+                name="sauna_data_product_picture",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def serve_picture(self, request, object_id):
+        product = self.get_object(request, object_id)
+        if product is None:
+            raise Http404
+        stored = Product.objects.filter(pk=product.pk).values_list("picture", "picture_name").first()
+        if stored is None:
+            raise Http404
+        content, filename = stored
+        if not content or not filename:
+            raise Http404
+        response = HttpResponse(
+            bytes(content),
+            content_type=_CONTENT_TYPES.get(Path(filename).suffix.lower(), "application/octet-stream"),
+        )
+        response["Content-Disposition"] = content_disposition_header(False, filename)
+        return response
 
     @admin.display(description="Cords", ordering="number_of_cords")
     def cords(self, obj: Product) -> int:
@@ -655,6 +735,7 @@ class ProductAdmin(EditableModelAdmin):
                     "product_id",
                     "item_no",
                     "product_name",
+                    "picture_upload",
                     "voltage",
                     "plug_type",
                     ("wattage", "watt_on_label"),
@@ -832,6 +913,13 @@ class GroupedProductCheckbox(forms.Widget):
 
 
 class ProductIssueAdminForm(forms.ModelForm):
+    support_doc_upload = forms.FileField(
+        required=False,
+        label="Support doc",
+        widget=forms.FileInput(attrs={"accept": ".pdf,application/pdf"}),
+        help_text="Optional PDF with the problem and a possible solution.",
+    )
+
     class Meta:
         model = ProductIssue
         fields = ("products", "date", "status", "note", "doc_ref")
@@ -861,6 +949,36 @@ class ProductIssueAdminForm(forms.ModelForm):
                 document_url,
                 document_name.split(" · ")[-1],
             )
+        issue = self.instance
+        if issue.pk and issue.support_doc_name:
+            url = reverse("admin:sauna_data_productissue_support", args=[issue.pk])
+            self.fields["support_doc_upload"].help_text = _file_help(
+                url,
+                issue.support_doc_name,
+                "support_doc_upload",
+            )
+
+    def clean_support_doc_upload(self):
+        return _clean_limited_upload(
+            self.cleaned_data.get("support_doc_upload"),
+            {".pdf"},
+            "Support doc must be a PDF file.",
+        )
+
+    def save(self, commit=True):
+        issue = super().save(commit=False)
+        if _clear_requested(self, "support_doc_upload"):
+            issue.support_doc = None
+            issue.support_doc_name = ""
+        else:
+            uploaded = self.cleaned_data.get("support_doc_upload")
+            if uploaded:
+                issue.support_doc = uploaded.read()
+                issue.support_doc_name = _stored_upload_name(uploaded)
+        if commit:
+            issue.save()
+            self.save_m2m()
+        return issue
 
 
 class RelatedCheckboxFilter(admin.SimpleListFilter):
@@ -952,7 +1070,7 @@ class ProductIssueAdmin(EditableModelAdmin):
         css = {"all": ("sauna_data/product_admin.css",)}
 
     def get_queryset(self, request):
-        return super().get_queryset(request).defer("documentation").prefetch_related("products")
+        return super().get_queryset(request).defer("documentation", "support_doc").prefetch_related("products")
 
     def get_urls(self):
         custom = [
@@ -960,6 +1078,11 @@ class ProductIssueAdmin(EditableModelAdmin):
                 "<path:object_id>/file/documentation/",
                 self.admin_site.admin_view(self.serve_documentation),
                 name="sauna_data_productissue_file",
+            ),
+            path(
+                "<path:object_id>/file/support/",
+                self.admin_site.admin_view(self.serve_support_doc),
+                name="sauna_data_productissue_support",
             ),
         ]
         return custom + super().get_urls()
@@ -982,8 +1105,26 @@ class ProductIssueAdmin(EditableModelAdmin):
         response["Content-Disposition"] = content_disposition_header(False, filename)
         return response
 
+    def serve_support_doc(self, request, object_id):
+        issue = self.get_object(request, object_id)
+        if issue is None:
+            raise Http404
+        stored = (
+            ProductIssue.objects.filter(pk=issue.pk)
+            .values_list("support_doc", "support_doc_name")
+            .first()
+        )
+        if stored is None:
+            raise Http404
+        content, filename = stored
+        if not content or not filename:
+            raise Http404
+        response = HttpResponse(bytes(content), content_type="application/pdf")
+        response["Content-Disposition"] = content_disposition_header(False, filename)
+        return response
+
     def get_fields(self, request, obj=None):
-        fields = ["products", "date", "status", "note", "doc_ref"]
+        fields = ["products", "date", "status", "note", "doc_ref", "support_doc_upload"]
         if obj is not None:
             fields.extend(["created_at", "updated_at"])
         return fields

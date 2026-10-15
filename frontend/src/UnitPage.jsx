@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { csrfToken, Loading, LoadError, StatusPill, useJson } from "./ui";
 
+function formatDate(iso) {
+  const [year, month, day] = iso.split("-");
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 async function postForm(url, fields) {
   const body = new FormData();
   body.append("csrfmiddlewaretoken", csrfToken());
@@ -201,6 +206,43 @@ export function UnitPage({ id, editable }) {
           ) : null}
         </section>
       </div>
+      <section className="form-card known-issues">
+        <h2>Known issues</h2>
+        { (unit.issues || []).length ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Note</th>
+                  <th>Status</th>
+                  <th>Documentation</th>
+                  <th>Support doc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(unit.issues || []).map((issue) => (
+                  <tr key={issue.id}>
+                    <td>{formatDate(issue.date)}</td>
+                    <td className="wrap">{issue.note || "—"}</td>
+                    <td><StatusPill status={issue.status} label={issue.status_label} /></td>
+                    <td>
+                      {issue.documentation_url ? (
+                        <a href={issue.documentation_url} target="_blank" rel="noopener noreferrer">View</a>
+                      ) : "—"}
+                    </td>
+                    <td>
+                      {issue.support_doc_url ? (
+                        <a href={issue.support_doc_url} target="_blank" rel="noopener noreferrer">View</a>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="empty-block">No issues recorded for this product.</p>}
+      </section>
     </article>
   );
 }

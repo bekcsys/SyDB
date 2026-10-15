@@ -29,6 +29,30 @@ class QcDatabaseTests(TestCase):
             qc_status=ProductItem.Status.TESTING,
             qc_tester_name="McCoy",
         )
+        viewer = get_user_model().objects.create_user("saunakb-viewer", password="viewer-pass")
+        self.client.force_login(viewer)
+
+    def test_sauna_pages_require_a_separate_login(self) -> None:
+        self.client.logout()
+        home = self.client.get("/")
+        self.assertEqual(home.status_code, 302)
+        self.assertIn("/login/", home.url)
+        blocked = self.client.get("/api/products/")
+        self.assertEqual(blocked.status_code, 401)
+        picture = self.client.get(f"/products/{self.product.pk}/picture/")
+        self.assertEqual(picture.status_code, 302)
+        page = self.client.get("/login/")
+        self.assertContains(page, "SaunaKB")
+        self.assertContains(page, 'href="/admin/"')
+        self.assertContains(page, ">Admin<")
+        signed_in = self.client.post(
+            "/login/",
+            {"username": "saunakb-viewer", "password": "viewer-pass"},
+        )
+        self.assertEqual(signed_in.status_code, 302)
+        self.assertEqual(signed_in.url, "/")
+        self.assertEqual(self.client.get("/admin/").status_code, 302)
+        self.assertIn("/admin/login/", self.client.get("/admin/").url)
 
     def test_duplicate_item_no_is_a_separate_product(self) -> None:
         from sauna_data.models import PowerBox
@@ -689,6 +713,13 @@ class QcDatabaseTests(TestCase):
         self.assertIn("L6-20P", admin_html)
         self.assertIn('name="watt_on_label"', admin_html)
         self.assertIn("field-wattage field-watt_on_label", admin_html)
+        self.assertIn('name="picture_upload"', admin_html)
+        self.assertIn('className="spec-layout"', ui_source("ProductDetailPage.jsx"))
+        self.assertIn(">Known issues<", ui_source("UnitPage.jsx"))
+        self.assertIn('title="Common product issues and solutions"', ui_source("UnitsPage.jsx"))
+        self.assertIn('title="QC info"', ui_source("UnitsPage.jsx"))
+        self.assertIn("useState(false)", ui_source("UnitsPage.jsx"))
+        self.assertNotIn("Search product items", ui_source("UnitsPage.jsx"))
 
     def test_control_panel_has_no_supplier(self) -> None:
         from sauna_data.models import ControlPanel
@@ -1186,10 +1217,13 @@ class QcDatabaseTests(TestCase):
         change = f"/admin/sauna_data/productissue/{issue.pk}/change/"
         page = self.client.get(change)
         self.assertContains(page, 'name="doc_ref"')
+        self.assertContains(page, 'name="support_doc_upload"')
         self.assertContains(page, "panel-guide.pdf")
         self.assertContains(page, "cp-guide.pdf")
         self.assertContains(page, "box-firmware.pdf")
         self.assertNotContains(page, 'name="documentation_upload"')
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
         saved = self.client.post(
             change,
             {
@@ -1198,17 +1232,32 @@ class QcDatabaseTests(TestCase):
                 "status": "IN_PROGRESS",
                 "note": "Latch sticks on the left side",
                 "doc_ref": panel_ref,
+                "support_doc_upload": SimpleUploadedFile(
+                    "latch-notes.pdf", b"%PDF-support", content_type="application/pdf"
+                ),
             },
         )
         self.assertEqual(saved.status_code, 302)
         issue.refresh_from_db()
         self.assertEqual(issue.note, "Latch sticks on the left side")
         self.assertEqual(issue.doc_ref, panel_ref)
+        self.assertEqual(issue.support_doc_name, "latch-notes.pdf")
+        self.assertEqual(bytes(issue.support_doc), b"%PDF-support")
         detail = self.client.get(f"/api/products/{self.product.pk}/").json()
         self.assertEqual(detail["issues"][0]["documentation_name"], "CP-issue-doc · panel-guide.pdf")
         downloaded = self.client.get(detail["issues"][0]["documentation_url"])
         self.assertEqual(downloaded.status_code, 200)
         self.assertEqual(downloaded.content, b"%PDF-panel")
+        support = self.client.get(detail["issues"][0]["support_doc_url"])
+        self.assertEqual(support.status_code, 200)
+        self.assertEqual(support.content, b"%PDF-support")
+        unit_payload = self.client.get(f"/api/units/{self.unit.pk}/").json()
+        self.assertEqual(unit_payload["issues"][0]["support_doc_name"], "latch-notes.pdf")
+        catalog = self.client.get("/api/units/").json()["issues"]
+        listed = next(row for row in catalog if row["id"] == issue.pk)
+        self.assertEqual(listed["impacted_products"], 1)
+        self.assertEqual(listed["products"][0]["name"], self.product.product_name)
+        self.assertEqual(listed["support_doc_name"], "latch-notes.pdf")
         listing = self.client.get("/admin/sauna_data/productissue/")
         self.assertContains(listing, "IssueID")
         self.assertContains(listing, ">Doc<")

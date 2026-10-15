@@ -1,6 +1,25 @@
 from django.db import IntegrityError
 from django.db.utils import DataError
-from django.shortcuts import render
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+
+
+class SaunaLoginMiddleware:
+    """The knowledge base and its files stay behind a login. Admin keeps its own login."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.user.is_authenticated or self._is_public(request.path):
+            return self.get_response(request)
+        if request.path.startswith("/api/"):
+            return JsonResponse({"error": "Login required."}, status=401)
+        return redirect(f"/login/?next={request.get_full_path()}")
+
+    @staticmethod
+    def _is_public(path: str) -> bool:
+        return path.startswith(("/login/", "/admin/", "/static/"))
 
 
 class FriendlyDatabaseErrorMiddleware:

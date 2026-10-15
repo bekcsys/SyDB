@@ -20,7 +20,9 @@
 -- One issue can apply to many products. Status is Not Started, In Progress, or Solved.
 -- Solved issues stay in the table.
 -- doc_ref names an existing control-panel instruction or power-box firmware file.
+-- support_doc is an optional PDF describing the problem and a possible solution.
 -- documentation and documentation_name hold an older uploaded copy, when one exists.
+-- products.picture is shown on the product page, beside the spec.
 
 -- FK policy matches model on_delete. Django stores these foreign keys as
 -- DEFERRABLE INITIALLY DEFERRED and applies the policy in the ORM.
@@ -44,6 +46,8 @@ CREATE TABLE products (
     number_of_cords INTEGER NOT NULL DEFAULT 1,
     plug_type VARCHAR(32) NOT NULL DEFAULT '',
     watt_on_label INTEGER NULL,
+    picture BYTEA NULL,
+    picture_name VARCHAR(255) NOT NULL DEFAULT '',
     power_box_id BIGINT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -136,6 +140,8 @@ CREATE TABLE product_issues (
     status VARCHAR(16) NOT NULL DEFAULT 'NOT_STARTED',
     note TEXT NOT NULL DEFAULT '',
     doc_ref VARCHAR(80) NOT NULL DEFAULT '',
+    support_doc BYTEA NULL,
+    support_doc_name VARCHAR(255) NOT NULL DEFAULT '',
     documentation BYTEA NULL,
     documentation_name VARCHAR(255) NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

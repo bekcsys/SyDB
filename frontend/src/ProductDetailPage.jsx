@@ -68,20 +68,26 @@ function IssueTable({ issues }) {
             <th>Date</th>
             <th>Note</th>
             <th>Status</th>
-            <th>Documentation</th>
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map((issue) => (
-            <tr key={issue.id}>
-              <td>{formatDate(issue.date)}</td>
-              <td className="wrap">{issue.note || "—"}</td>
-              <td><StatusPill status={issue.status} label={issue.status_label} /></td>
-              <td>
-                {issue.documentation_url ? (
-                  <a href={issue.documentation_url} target="_blank" rel="noopener noreferrer">View</a>
-                ) : "—"}
-              </td>
+                <th>Documentation</th>
+                <th>Support doc</th>
+              </tr>
+            </thead>
+            <tbody>
+              {issues.map((issue) => (
+                <tr key={issue.id}>
+                  <td>{formatDate(issue.date)}</td>
+                  <td className="wrap">{issue.note || "—"}</td>
+                  <td><StatusPill status={issue.status} label={issue.status_label} /></td>
+                  <td>
+                    {issue.documentation_url ? (
+                      <a href={issue.documentation_url} target="_blank" rel="noopener noreferrer">View</a>
+                    ) : "—"}
+                  </td>
+                  <td>
+                    {issue.support_doc_url ? (
+                      <a href={issue.support_doc_url} target="_blank" rel="noopener noreferrer">View</a>
+                    ) : "—"}
+                  </td>
             </tr>
           ))}
         </tbody>
@@ -135,7 +141,15 @@ export function ProductDetailPage({ id }) {
       </header>
       <div className="fold-list">
         <AccordionSection id="product-spec" title="SPEC" open={open.has("spec")} onToggle={() => toggle("spec")}>
-          <section className="spec-sheet" aria-label="Specifications">
+          <div className="spec-layout">
+            <figure className="product-photo">
+              {product.picture_url ? (
+                <a href={product.picture_url} target="_blank" rel="noopener noreferrer">
+                  <img src={product.picture_url} alt={product.name} />
+                </a>
+              ) : <div className="photo-empty">None</div>}
+            </figure>
+            <section className="spec-sheet" aria-label="Specifications">
             <dl>
               <div><dt>Voltage</dt><dd>{display(product.voltage, " V")}</dd></div>
               <div><dt>Plug type</dt><dd>{display(product.plug_type)}</dd></div>
@@ -147,6 +161,7 @@ export function ProductDetailPage({ id }) {
               <div><dt>Control panel type</dt><dd>{display(product.control_panel)}</dd></div>
             </dl>
           </section>
+          </div>
           <figure className="fold-photo">
             <PictureStage pictures={boxPictures} />
             <figcaption>

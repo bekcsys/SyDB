@@ -61,8 +61,12 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "sauna_data.middleware.SaunaLoginMiddleware",
     "sauna_data.middleware.FriendlyDatabaseErrorMiddleware",
 ]
+
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"

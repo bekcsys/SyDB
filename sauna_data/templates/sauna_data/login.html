@@ -1,0 +1,32 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in | WUSA</title>
+  <link rel="stylesheet" href="{% static 'app/assets/style.css' %}">
+</head>
+<body>
+  <main class="login-screen">
+    <section class="login-card">
+      <p class="brand-kicker">WUSA</p>
+      <h1>SaunaKB</h1>
+      <p>Sign in to view products, instructions, and QC records.</p>
+      {% if error %}<p class="banner banner-error" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="{% url 'sauna_login' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <label>Username
+          <input type="text" name="username" autocomplete="username" required autofocus>
+        </label>
+        <label>Password
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+      <a class="login-admin" href="/admin/">Admin</a>
+    </section>
+  </main>
+</body>
+</html>

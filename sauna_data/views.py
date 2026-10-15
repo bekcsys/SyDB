@@ -4,16 +4,58 @@ import mimetypes
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q, QuerySet
 from django.db.utils import DataError
+from django.contrib.auth import authenticate, login, logout
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.utils.http import content_disposition_header
+from django.views.decorators.http import require_http_methods, require_POST
+from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 
 from sauna_data.forms import PhysicalUnitQcForm
 from sauna_data.models import Product, ProductIssue, ProductItem
 from sauna_data.qc_support import catalog_file, support_file
 
 UNIT_SAVE_FAILED = "This QC status could not be saved. Check your entries and try again."
+
+
+def _safe_next(request: HttpRequest, candidate: str) -> str:
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return "/"
+
+
+@ensure_csrf_cookie
+@require_http_methods(["GET", "POST"])
+def sauna_login(request: HttpRequest) -> HttpResponse:
+    if request.user.is_authenticated:
+        return redirect(_safe_next(request, request.GET.get("next", "")))
+    error = ""
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if request.method == "POST":
+        user = authenticate(
+            request,
+            username=(request.POST.get("username") or "").strip(),
+            password=request.POST.get("password") or "",
+        )
+        if user is not None and user.is_active:
+            login(request, user)
+            return redirect(_safe_next(request, next_url))
+        error = "Those credentials were not recognized."
+    return render(
+        request,
+        "sauna_data/login.html",
+        {"error": error, "next": next_url},
+    )
+
+
+@require_POST
+def sauna_logout(request: HttpRequest) -> HttpResponse:
+    logout(request)
+    return redirect("sauna_login")
 
 
 @ensure_csrf_cookie
@@ -89,6 +131,7 @@ def product_list_query(request: HttpRequest) -> tuple[QuerySet[Product], dict]:
     queryset: QuerySet[Product] = Product.objects.select_related(
         "power_box", "power_box__control_panel"
     ).defer(
+        "picture",
         "power_box__picture",
         "power_box__firmware_document",
         "power_box__firmware_video",
@@ -300,6 +343,16 @@ def qc_form_file(request: HttpRequest, unit_id: int) -> HttpResponse:
     return response
 
 
+def product_picture(request: HttpRequest, product_id: int) -> HttpResponse:
+    product = get_object_or_404(Product.objects.only("product_id", "picture", "picture_name"), pk=product_id)
+    if not product.picture or not product.picture_name:
+        raise Http404()
+    content_type = mimetypes.guess_type(product.picture_name)[0] or "application/octet-stream"
+    response = HttpResponse(bytes(product.picture), content_type=content_type)
+    response["Content-Disposition"] = content_disposition_header(False, product.picture_name)
+    return response
+
+
 def product_issue_file(request: HttpRequest, product_id: int, issue_id: int) -> HttpResponse:
     issue = get_object_or_404(ProductIssue, pk=issue_id, products__pk=product_id)
     if not issue.documentation or not issue.documentation_name:
@@ -307,4 +360,13 @@ def product_issue_file(request: HttpRequest, product_id: int, issue_id: int) -> 
     content_type = mimetypes.guess_type(issue.documentation_name)[0] or "application/octet-stream"
     response = HttpResponse(bytes(issue.documentation), content_type=content_type)
     response["Content-Disposition"] = content_disposition_header(False, issue.documentation_name)
+    return response
+
+
+def product_issue_support_file(request: HttpRequest, product_id: int, issue_id: int) -> HttpResponse:
+    issue = get_object_or_404(ProductIssue, pk=issue_id, products__pk=product_id)
+    if not issue.support_doc or not issue.support_doc_name:
+        raise Http404()
+    response = HttpResponse(bytes(issue.support_doc), content_type="application/pdf")
+    response["Content-Disposition"] = content_disposition_header(False, issue.support_doc_name)
     return response

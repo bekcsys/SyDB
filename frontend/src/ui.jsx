@@ -11,6 +11,10 @@ export function useJson(url) {
       signal: controller.signal,
     })
       .then(async (response) => {
+        if (response.status === 401) {
+          window.location.assign("/login/");
+          return null;
+        }
         if (!response.ok) {
           throw new Error(
             response.status === 404 ? "This record was not found." : "The page could not be loaded.",
@@ -18,7 +22,9 @@ export function useJson(url) {
         }
         return response.json();
       })
-      .then((data) => setState({ status: "ready", data, error: "" }))
+      .then((data) => {
+        if (data) setState({ status: "ready", data, error: "" });
+      })
       .catch((error) => {
         if (error.name === "AbortError") return;
         setState({ status: "error", data: null, error: error.message });

@@ -3,6 +3,8 @@ from django.urls import path
 from sauna_data import api, views
 
 urlpatterns = [
+    path("login/", views.sauna_login, name="sauna_login"),
+    path("logout/", views.sauna_logout, name="sauna_logout"),
     path("api/products/", api.products_api, name="api_products"),
     path("api/products/<int:product_id>/", api.product_detail_api, name="api_product_detail"),
     path("api/power-boxes/", api.power_boxes_api, name="api_power_boxes"),
@@ -20,10 +22,16 @@ urlpatterns = [
         name="qc_support_file",
     ),
     path("units/<int:unit_id>/qc-form/", views.qc_form_file, name="qc_form_file"),
+    path("products/<int:product_id>/picture/", views.product_picture, name="product_picture"),
     path(
         "products/<int:product_id>/issues/<int:issue_id>/documentation/",
         views.product_issue_file,
         name="product_issue_file",
+    ),
+    path(
+        "products/<int:product_id>/issues/<int:issue_id>/support/",
+        views.product_issue_support_file,
+        name="product_issue_support_file",
     ),
     path("products/", views.product_list, name="product_list"),
     path("power-boxes/", views.catalog_section, {"section": "power_boxes"}, name="power_box_list"),
